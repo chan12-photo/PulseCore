@@ -1,5 +1,7 @@
 #include "pulsecore/network/blocking_tcp.hpp"
 
+#include "pulsecore/core/handler.hpp"
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
@@ -122,41 +124,6 @@ void SendAll(int fd, std::span<const protocol::Byte> bytes) {
   }
 }
 
-std::vector<protocol::Byte> ErrorPayload(std::string_view message) {
-  return {message.begin(), message.end()};
-}
-
-protocol::Message HandleRequest(const protocol::Message& request) {
-  switch (request.type) {
-    case protocol::MessageType::kEchoRequest:
-      return protocol::Message{
-          .type = protocol::MessageType::kEchoResponse,
-          .request_id = request.request_id,
-          .payload = request.payload,
-      };
-    case protocol::MessageType::kWorkRequest:
-      return protocol::Message{
-          .type = protocol::MessageType::kWorkResponse,
-          .request_id = request.request_id,
-          .payload = request.payload,
-      };
-    case protocol::MessageType::kEchoResponse:
-    case protocol::MessageType::kWorkResponse:
-    case protocol::MessageType::kErrorResponse:
-      return protocol::Message{
-          .type = protocol::MessageType::kErrorResponse,
-          .request_id = request.request_id,
-          .payload = ErrorPayload("unexpected response message from client"),
-      };
-  }
-
-  return protocol::Message{
-      .type = protocol::MessageType::kErrorResponse,
-      .request_id = request.request_id,
-      .payload = ErrorPayload("unknown request message"),
-  };
-}
-
 void ServeClient(int fd) {
   protocol::FrameDecoder decoder;
 
@@ -167,7 +134,7 @@ void ServeClient(int fd) {
       return;
     }
 
-    auto response = HandleRequest(*read.message);
+    auto response = core::HandleRequest(*read.message);
     SendMessage(fd, response);
   }
 }

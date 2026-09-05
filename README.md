@@ -19,6 +19,7 @@ Implemented:
 - loopback TCP integration tests
 - malformed frame and client disconnect coverage
 - non-blocking connection read/write state tests
+- shared request handler for blocking and future reactor paths
 - initial project scope ADR
 - binary protocol framing ADR
 - non-blocking connection model ADR

@@ -13,6 +13,7 @@ This layer does not use epoll yet. It only proves that one socket can be driven 
 - return all complete protocol messages currently buffered
 - track pending output bytes and write offset
 - avoid unbounded output growth through a configured limit
+- preserve pending output after partial writes and `EAGAIN`
 
 ## Current Statuses
 

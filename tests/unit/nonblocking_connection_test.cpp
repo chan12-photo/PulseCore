@@ -3,12 +3,14 @@
 #include "pulsecore/protocol/codec.hpp"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <utility>
 #include <vector>
@@ -71,6 +73,26 @@ void SetReceiveTimeout(int fd) {
   timeval timeout{};
   timeout.tv_sec = 1;
   ASSERT_EQ(::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
+}
+
+void SetSendBufferSize(int fd, int bytes) {
+  ASSERT_EQ(::setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &bytes, sizeof(bytes)), 0);
+}
+
+void DrainAvailableBytes(int fd, std::vector<protocol::Byte>& out) {
+  std::array<protocol::Byte, 8192> bytes{};
+
+  while (true) {
+    const auto received = ::recv(fd, bytes.data(), bytes.size(), 0);
+    if (received < 0 && errno == EINTR) {
+      continue;
+    }
+    if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      return;
+    }
+    ASSERT_GT(received, 0);
+    out.insert(out.end(), bytes.begin(), bytes.begin() + received);
+  }
 }
 
 }  // namespace
@@ -217,6 +239,59 @@ TEST(NonBlockingConnectionTest, QueuesAndFlushesOutputFrame) {
   EXPECT_EQ(decoded.message->type, protocol::MessageType::kEchoResponse);
   EXPECT_EQ(decoded.message->request_id, 88U);
   EXPECT_EQ(decoded.message->payload, (std::vector<protocol::Byte>{0x10, 0x20}));
+}
+
+TEST(NonBlockingConnectionTest, PreservesPendingOutputAfterWouldBlock) {
+  auto pair = MakeSocketPair();
+  SetSendBufferSize(pair.connection_end.get(), 4096);
+  SetNonBlocking(pair.connection_end.get());
+  SetNonBlocking(pair.peer_end.get());
+
+  constexpr std::size_t kFrameCount = 128;
+  constexpr std::size_t kPayloadSize = 16U * 1024U;
+
+  ConnectionLimits limits{};
+  limits.max_output_buffer = kFrameCount * (protocol::kHeaderSize + kPayloadSize);
+
+  Connection connection(ConnectionId{7}, std::move(pair.connection_end), limits);
+
+  const std::vector<protocol::Byte> payload(kPayloadSize, 0xCC);
+  for (std::uint64_t id = 1; id <= kFrameCount; ++id) {
+    ASSERT_TRUE(connection.QueueOutput(EchoResponse(id, payload)));
+  }
+
+  const auto initial_pending = connection.pending_output_bytes();
+  ASSERT_GT(initial_pending, 0U);
+
+  auto write_result = connection.WriteAvailable();
+
+  ASSERT_EQ(write_result.status, WriteAvailableStatus::kWouldBlock);
+  EXPECT_TRUE(connection.has_pending_output());
+  EXPECT_LT(connection.pending_output_bytes(), initial_pending);
+
+  std::vector<protocol::Byte> received_bytes;
+  while (connection.has_pending_output()) {
+    DrainAvailableBytes(pair.peer_end.get(), received_bytes);
+
+    write_result = connection.WriteAvailable();
+    ASSERT_NE(write_result.status, WriteAvailableStatus::kPeerClosed);
+  }
+
+  DrainAvailableBytes(pair.peer_end.get(), received_bytes);
+
+  protocol::FrameDecoder decoder;
+  decoder.Append(received_bytes);
+
+  for (std::uint64_t id = 1; id <= kFrameCount; ++id) {
+    const auto decoded = decoder.Next();
+    ASSERT_EQ(decoded.status, protocol::DecodeStatus::kDecoded) << "id=" << id;
+    ASSERT_TRUE(decoded.message.has_value()) << "id=" << id;
+    EXPECT_EQ(decoded.message->type, protocol::MessageType::kEchoResponse) << "id=" << id;
+    EXPECT_EQ(decoded.message->request_id, id) << "id=" << id;
+    EXPECT_EQ(decoded.message->payload.size(), kPayloadSize) << "id=" << id;
+  }
+
+  EXPECT_EQ(decoder.BufferedSize(), 0U);
 }
 
 TEST(NonBlockingConnectionTest, RejectsOutputAboveConfiguredLimit) {

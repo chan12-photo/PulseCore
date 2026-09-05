@@ -13,6 +13,7 @@ option(PULSECORE_ENABLE_WARNINGS "Enable project compiler warnings" ON)
 find_package(Threads REQUIRED)
 
 add_library(pulsecore_core
+  src/core/handler.cpp
   src/network/connection.cpp
   src/network/blocking_tcp.cpp
   src/protocol/codec.cpp
@@ -85,6 +86,7 @@ if(PULSECORE_BUILD_TESTS)
   FetchContent_MakeAvailable(googletest)
 
   add_executable(pulsecore_unit_tests
+    tests/unit/handler_test.cpp
     tests/unit/nonblocking_connection_test.cpp
     tests/unit/protocol_codec_test.cpp
     tests/unit/unique_fd_test.cpp
