@@ -6,12 +6,18 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
 
 std::uint16_t ParsePort(const char* text) {
-  const auto value = std::stoul(std::string(text));
+  std::size_t parsed_chars = 0;
+  const std::string input(text);
+  const auto value = std::stoul(input, &parsed_chars);
+  if (parsed_chars != input.size()) {
+    throw std::runtime_error("port must be an integer");
+  }
   if (value > std::numeric_limits<std::uint16_t>::max()) {
     throw std::runtime_error("port is out of range");
   }
@@ -22,12 +28,20 @@ std::vector<pulsecore::protocol::Byte> PayloadBytes(std::string_view text) {
   return {text.begin(), text.end()};
 }
 
+void PrintUsage() {
+  std::cerr << "usage: pulsecore_client <port> [payload]\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string_view(argv[1]) == "--help") {
+      PrintUsage();
+      return 0;
+    }
     if (argc < 2 || argc > 3) {
-      std::cerr << "usage: pulsecore_client <port> [payload]\n";
+      PrintUsage();
       return 2;
     }
 
