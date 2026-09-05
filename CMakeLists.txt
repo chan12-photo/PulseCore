@@ -104,6 +104,24 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         $<$<CXX_COMPILER_ID:MSVC>:/W4>
     )
   endif()
+
+  add_executable(pulsecore_epoll_benchmark
+    apps/benchmark/epoll_loopback.cpp
+  )
+
+  target_link_libraries(pulsecore_epoll_benchmark
+    PRIVATE
+      pulsecore_core
+      Threads::Threads
+  )
+
+  if(PULSECORE_ENABLE_WARNINGS)
+    target_compile_options(pulsecore_epoll_benchmark
+      PRIVATE
+        $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic>
+        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+    )
+  endif()
 endif()
 
 if(PULSECORE_BUILD_TESTS)

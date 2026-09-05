@@ -1,0 +1,232 @@
+#include "pulsecore/network/blocking_tcp.hpp"
+#include "pulsecore/network/epoll_echo_server.hpp"
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <mutex>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
+#include <vector>
+
+namespace {
+
+struct BenchmarkConfig {
+  std::size_t clients{4};
+  std::size_t requests_per_client{1000};
+  std::size_t payload_size{64};
+  std::size_t workers{std::max(1U, std::thread::hardware_concurrency() / 2U)};
+};
+
+class ServerThread {
+ public:
+  explicit ServerThread(pulsecore::network::EpollEchoServer& server)
+      : server_(server),
+        thread_([this] {
+          try {
+            server_.Run();
+          } catch (...) {
+            error_ = std::current_exception();
+          }
+        }) {}
+
+  ServerThread(const ServerThread&) = delete;
+  ServerThread& operator=(const ServerThread&) = delete;
+
+  ~ServerThread() noexcept {
+    server_.Stop();
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+
+  void StopAndJoin() {
+    server_.Stop();
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+    if (error_ != nullptr) {
+      std::rethrow_exception(error_);
+    }
+  }
+
+ private:
+  pulsecore::network::EpollEchoServer& server_;
+  std::thread thread_;
+  std::exception_ptr error_;
+};
+
+std::size_t ParsePositiveSize(std::string_view option, const char* text) {
+  std::size_t parsed_chars = 0;
+  const auto value = std::stoull(std::string(text), &parsed_chars);
+  if (parsed_chars != std::string_view(text).size() || value == 0 ||
+      value > std::numeric_limits<std::size_t>::max()) {
+    throw std::runtime_error(std::string(option) + " must be a positive integer");
+  }
+  return static_cast<std::size_t>(value);
+}
+
+BenchmarkConfig ParseArgs(int argc, char** argv) {
+  BenchmarkConfig config;
+
+  for (int i = 1; i < argc; ++i) {
+    const std::string_view option(argv[i]);
+    if (i + 1 >= argc) {
+      throw std::runtime_error(std::string(option) + " requires a value");
+    }
+
+    const char* value = argv[++i];
+    if (option == "--clients") {
+      config.clients = ParsePositiveSize(option, value);
+    } else if (option == "--requests-per-client") {
+      config.requests_per_client = ParsePositiveSize(option, value);
+    } else if (option == "--payload-size") {
+      config.payload_size = ParsePositiveSize(option, value);
+    } else if (option == "--workers") {
+      config.workers = ParsePositiveSize(option, value);
+    } else {
+      throw std::runtime_error("unknown option: " + std::string(option));
+    }
+  }
+
+  if (config.payload_size > pulsecore::protocol::kMaxPayloadSize) {
+    throw std::runtime_error("--payload-size exceeds protocol max payload size");
+  }
+
+  return config;
+}
+
+pulsecore::protocol::Message EchoRequest(std::uint64_t request_id,
+                                         std::vector<pulsecore::protocol::Byte> payload) {
+  return pulsecore::protocol::Message{
+      .type = pulsecore::protocol::MessageType::kEchoRequest,
+      .request_id = request_id,
+      .payload = std::move(payload),
+  };
+}
+
+void RecordFirstException(std::mutex& mutex, std::exception_ptr& first_error) {
+  std::lock_guard lock(mutex);
+  if (first_error == nullptr) {
+    first_error = std::current_exception();
+  }
+}
+
+void RunClient(std::uint16_t port,
+               std::size_t client_index,
+               const BenchmarkConfig& config,
+               std::atomic_size_t& ready_clients,
+               std::atomic_bool& start) {
+  ready_clients.fetch_add(1, std::memory_order_release);
+  while (!start.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+
+  auto socket = pulsecore::network::ConnectTcp("127.0.0.1", port);
+  pulsecore::protocol::FrameDecoder decoder;
+  std::vector<pulsecore::protocol::Byte> payload(config.payload_size,
+                                                 static_cast<pulsecore::protocol::Byte>(
+                                                     client_index & 0xFFU));
+
+  for (std::size_t request_index = 0; request_index < config.requests_per_client;
+       ++request_index) {
+    const auto request_id =
+        static_cast<std::uint64_t>(client_index * config.requests_per_client + request_index);
+    pulsecore::network::SendMessage(socket.get(), EchoRequest(request_id, payload));
+
+    auto read = pulsecore::network::ReadMessage(socket.get(), decoder);
+    if (read.status != pulsecore::network::ReadMessageStatus::kMessage ||
+        !read.message.has_value()) {
+      throw std::runtime_error("benchmark client did not receive a response");
+    }
+    if (read.message->type != pulsecore::protocol::MessageType::kEchoResponse ||
+        read.message->request_id != request_id || read.message->payload != payload) {
+      throw std::runtime_error("benchmark client received an unexpected response");
+    }
+  }
+}
+
+void PrintUsage() {
+  std::cerr << "usage: pulsecore_epoll_benchmark "
+               "[--clients N] [--requests-per-client N] [--payload-size N] [--workers N]\n";
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  try {
+    const auto config = ParseArgs(argc, argv);
+
+    pulsecore::network::EpollEchoServerOptions server_options;
+    server_options.worker_count = config.workers;
+    server_options.work_queue_capacity = std::max<std::size_t>(1024, config.clients * 8);
+
+    pulsecore::network::EpollEchoServer server(0, std::move(server_options));
+    ServerThread server_thread(server);
+
+    std::vector<std::thread> clients;
+    clients.reserve(config.clients);
+    std::atomic_size_t ready_clients{0};
+    std::atomic_bool start{false};
+    std::mutex error_mutex;
+    std::exception_ptr first_error;
+
+    for (std::size_t client_index = 0; client_index < config.clients; ++client_index) {
+      clients.emplace_back([&, client_index] {
+        try {
+          RunClient(server.port(), client_index, config, ready_clients, start);
+        } catch (...) {
+          RecordFirstException(error_mutex, first_error);
+        }
+      });
+    }
+
+    while (ready_clients.load(std::memory_order_acquire) < config.clients) {
+      std::this_thread::yield();
+    }
+
+    const auto started = std::chrono::steady_clock::now();
+    start.store(true, std::memory_order_release);
+
+    for (auto& client : clients) {
+      client.join();
+    }
+
+    const auto finished = std::chrono::steady_clock::now();
+    server_thread.StopAndJoin();
+
+    if (first_error != nullptr) {
+      std::rethrow_exception(first_error);
+    }
+
+    const auto elapsed = std::chrono::duration<double>(finished - started).count();
+    const auto total_requests = config.clients * config.requests_per_client;
+    const auto round_trip_frame_bytes =
+        total_requests * 2U * (pulsecore::protocol::kHeaderSize + config.payload_size);
+
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "clients=" << config.clients << '\n';
+    std::cout << "workers=" << config.workers << '\n';
+    std::cout << "requests_per_client=" << config.requests_per_client << '\n';
+    std::cout << "payload_bytes=" << config.payload_size << '\n';
+    std::cout << "total_requests=" << total_requests << '\n';
+    std::cout << "elapsed_seconds=" << elapsed << '\n';
+    std::cout << "requests_per_second=" << static_cast<double>(total_requests) / elapsed << '\n';
+    std::cout << "round_trip_frame_mib_per_second="
+              << (static_cast<double>(round_trip_frame_bytes) / (1024.0 * 1024.0)) / elapsed
+              << '\n';
+  } catch (const std::exception& error) {
+    PrintUsage();
+    std::cerr << "pulsecore_epoll_benchmark: " << error.what() << '\n';
+    return 1;
+  }
+}

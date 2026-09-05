@@ -26,6 +26,7 @@ Implemented:
 - Linux `signalfd` shutdown path for SIGINT/SIGTERM in the epoll server app
 - per-connection response ordering for asynchronous worker results
 - per-event read/write byte budgets for reactor fairness
+- Linux epoll loopback benchmark executable
 - Linux epoll integration tests
 - shared request handler for blocking and future reactor paths
 - initial project scope ADR
@@ -38,7 +39,8 @@ Implemented:
 
 Not implemented yet:
 
-- benchmark/profiling
+- perf profiling
+- evidence-based optimization
 
 ## Build
 
@@ -66,6 +68,14 @@ ctest --preset dev
 
 ```bash
 ./build/dev/pulsecore_client 9000 hello
+```
+
+## Run epoll Loopback Benchmark On Linux
+
+```bash
+cmake --preset release
+cmake --build --preset release
+./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2
 ```
 
 ## Release Build
