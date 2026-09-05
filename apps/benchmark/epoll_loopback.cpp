@@ -101,6 +101,9 @@ BenchmarkConfig ParseArgs(int argc, char** argv) {
   if (config.payload_size > pulsecore::protocol::kMaxPayloadSize) {
     throw std::runtime_error("--payload-size exceeds protocol max payload size");
   }
+  if (config.requests_per_client > std::numeric_limits<std::size_t>::max() / config.clients) {
+    throw std::runtime_error("--clients * --requests-per-client is too large");
+  }
 
   return config;
 }
@@ -124,6 +127,7 @@ void RecordFirstException(std::mutex& mutex, std::exception_ptr& first_error) {
 void RunClient(std::uint16_t port,
                std::size_t client_index,
                const BenchmarkConfig& config,
+               std::vector<double>& latencies_seconds,
                std::atomic_size_t& ready_clients,
                std::atomic_bool& start) {
   ready_clients.fetch_add(1, std::memory_order_release);
@@ -141,6 +145,7 @@ void RunClient(std::uint16_t port,
        ++request_index) {
     const auto request_id =
         static_cast<std::uint64_t>(client_index * config.requests_per_client + request_index);
+    const auto started = std::chrono::steady_clock::now();
     pulsecore::network::SendMessage(socket.get(), EchoRequest(request_id, payload));
 
     auto read = pulsecore::network::ReadMessage(socket.get(), decoder);
@@ -152,7 +157,19 @@ void RunClient(std::uint16_t port,
         read.message->request_id != request_id || read.message->payload != payload) {
       throw std::runtime_error("benchmark client received an unexpected response");
     }
+    const auto finished = std::chrono::steady_clock::now();
+    latencies_seconds[request_id] = std::chrono::duration<double>(finished - started).count();
   }
+}
+
+double PercentileMicros(const std::vector<double>& sorted_seconds, std::size_t percentile) {
+  if (sorted_seconds.empty()) {
+    return 0.0;
+  }
+
+  const auto rank = ((percentile * sorted_seconds.size()) + 99U) / 100U;
+  const auto index = std::min(sorted_seconds.size() - 1U, rank - 1U);
+  return sorted_seconds[index] * 1'000'000.0;
 }
 
 void PrintUsage() {
@@ -179,11 +196,12 @@ int main(int argc, char** argv) {
     std::atomic_bool start{false};
     std::mutex error_mutex;
     std::exception_ptr first_error;
+    std::vector<double> latencies_seconds(config.clients * config.requests_per_client, 0.0);
 
     for (std::size_t client_index = 0; client_index < config.clients; ++client_index) {
       clients.emplace_back([&, client_index] {
         try {
-          RunClient(server.port(), client_index, config, ready_clients, start);
+          RunClient(server.port(), client_index, config, latencies_seconds, ready_clients, start);
         } catch (...) {
           RecordFirstException(error_mutex, first_error);
         }
@@ -211,7 +229,9 @@ int main(int argc, char** argv) {
     const auto elapsed = std::chrono::duration<double>(finished - started).count();
     const auto total_requests = config.clients * config.requests_per_client;
     const auto round_trip_frame_bytes =
-        total_requests * 2U * (pulsecore::protocol::kHeaderSize + config.payload_size);
+        static_cast<double>(total_requests) * 2.0 *
+        static_cast<double>(pulsecore::protocol::kHeaderSize + config.payload_size);
+    std::sort(latencies_seconds.begin(), latencies_seconds.end());
 
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "clients=" << config.clients << '\n';
@@ -222,8 +242,11 @@ int main(int argc, char** argv) {
     std::cout << "elapsed_seconds=" << elapsed << '\n';
     std::cout << "requests_per_second=" << static_cast<double>(total_requests) / elapsed << '\n';
     std::cout << "round_trip_frame_mib_per_second="
-              << (static_cast<double>(round_trip_frame_bytes) / (1024.0 * 1024.0)) / elapsed
-              << '\n';
+              << (round_trip_frame_bytes / (1024.0 * 1024.0)) / elapsed << '\n';
+    std::cout << "latency_p50_us=" << PercentileMicros(latencies_seconds, 50) << '\n';
+    std::cout << "latency_p95_us=" << PercentileMicros(latencies_seconds, 95) << '\n';
+    std::cout << "latency_p99_us=" << PercentileMicros(latencies_seconds, 99) << '\n';
+    std::cout << "latency_max_us=" << (latencies_seconds.back() * 1'000'000.0) << '\n';
   } catch (const std::exception& error) {
     PrintUsage();
     std::cerr << "pulsecore_epoll_benchmark: " << error.what() << '\n';

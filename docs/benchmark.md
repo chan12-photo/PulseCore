@@ -6,7 +6,7 @@ PulseCore includes a Linux-only loopback benchmark executable:
 ./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2
 ```
 
-The benchmark starts an in-process epoll server, launches client threads, sends framed echo requests over TCP loopback, validates every response, and reports end-to-end throughput.
+The benchmark starts an in-process epoll server, launches client threads, sends framed echo requests over TCP loopback, validates every response, and reports end-to-end throughput plus round-trip latency percentiles.
 
 ## Options
 
@@ -14,6 +14,10 @@ The benchmark starts an in-process epoll server, launches client threads, sends 
 - `--requests-per-client N`: synchronous request/response exchanges per client
 - `--payload-size N`: echo payload bytes per request
 - `--workers N`: worker threads used by the epoll server
+
+Latency is measured in each client thread from immediately before `SendMessage()` to immediately
+after the response has been decoded and validated. Percentiles use nearest-rank selection over all
+client requests in the run.
 
 ## Baseline Run
 
@@ -43,8 +47,12 @@ requests_per_client=1000
 payload_bytes=64
 total_requests=4000
 elapsed_seconds=0.05
-requests_per_second=87491.38
-round_trip_frame_mib_per_second=14.02
+requests_per_second=84000.89
+round_trip_frame_mib_per_second=13.46
+latency_p50_us=46.83
+latency_p95_us=65.88
+latency_p99_us=87.12
+latency_max_us=129.79
 ```
 
 This is a local smoke baseline, not a production capacity claim.

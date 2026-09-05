@@ -36,16 +36,20 @@ requests_per_client=5000
 payload_bytes=65536
 total_requests=20000
 elapsed_seconds=0.59
-requests_per_second=33875.24
-round_trip_frame_mib_per_second=4235.70
+requests_per_second=34293.03
+round_trip_frame_mib_per_second=4287.94
+latency_p50_us=111.38
+latency_p95_us=159.75
+latency_p99_us=194.83
+latency_max_us=554.54
 
-1047.29 msec task-clock
-47584 context-switches
-78 cpu-migrations
-12518 page-faults
-0.591745167 seconds time elapsed
-0.349428000 seconds user
-0.758640000 seconds sys
+1041.52 msec task-clock
+48031 context-switches
+29 cpu-migrations
+7249 page-faults
+0.585010792 seconds time elapsed
+0.379031000 seconds user
+0.718852000 seconds sys
 ```
 
 Unsupported hardware counters:
@@ -79,26 +83,30 @@ requests_per_client=5000
 payload_bytes=65536
 total_requests=20000
 elapsed_seconds=0.56
-requests_per_second=35594.32
-round_trip_frame_mib_per_second=4450.65
+requests_per_second=34873.16
+round_trip_frame_mib_per_second=4360.47
+latency_p50_us=109.58
+latency_p95_us=153.12
+latency_p99_us=195.33
+latency_max_us=666.00
 ```
 
 Sampling result:
 
 ```text
-Samples: 193 of event 'task-clock'
+Samples: 199 of event 'task-clock'
 Total Lost Samples: 0
 
 Overhead  Shared Object      Symbol
-16.58%    libc.so.6          0x00000000000a1a50
-8.81%     [kernel.kallsyms]  __arch_copy_from_user
-8.29%     [kernel.kallsyms]  __arch_copy_to_user
-7.77%     [kernel.kallsyms]  __wake_up_sync_key
-7.77%     [kernel.kallsyms]  el0_svc
-6.22%     libc.so.6          recv
-4.15%     [kernel.kallsyms]  try_to_wake_up
-3.11%     [kernel.kallsyms]  arch_counter_get_cntvct
-3.11%     libc.so.6          memcmp
+17.09%    libc.so.6          0x00000000000a1a50
+7.04%     libc.so.6          recv
+6.53%     [kernel.kallsyms]  __wake_up_sync_key
+6.53%     [kernel.kallsyms]  el0_svc
+6.53%     [kernel.kallsyms]  try_to_wake_up
+6.03%     [kernel.kallsyms]  __arch_copy_to_user
+5.03%     [kernel.kallsyms]  __arch_copy_from_user
+3.52%     [kernel.kallsyms]  __fget_files
+3.02%     [kernel.kallsyms]  arch_counter_get_cntvct
 ```
 
 ## Interpretation

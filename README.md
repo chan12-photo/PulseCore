@@ -75,6 +75,8 @@ ctest --preset dev
 
 ## Run epoll Loopback Benchmark On Linux
 
+The benchmark reports throughput and round-trip latency percentiles.
+
 ```bash
 cmake --preset release
 cmake --build --preset release
