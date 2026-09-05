@@ -20,6 +20,10 @@ jobs:
             preset: dev
             cc: clang
             cxx: clang++
+          - compiler: gcc
+            preset: release
+            cc: gcc
+            cxx: g++
           - compiler: clang
             preset: asan-ubsan
             cc: clang
@@ -47,3 +51,7 @@ jobs:
 
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
+
+      - name: Benchmark smoke
+        if: matrix.preset == 'release'
+        run: ./build/release/pulsecore_epoll_benchmark --clients 2 --requests-per-client 10 --payload-size 16 --workers 2
