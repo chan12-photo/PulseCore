@@ -1,16 +1,17 @@
 #include "pulsecore/network/epoll_echo_server.hpp"
 
-#include "pulsecore/core/handler.hpp"
-
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <array>
 #include <cstring>
+#include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -21,6 +22,7 @@ namespace {
 
 constexpr int kListenBacklog = 128;
 constexpr std::uint64_t kListenerKey = 0;
+constexpr std::uint64_t kWorkerWakeupKey = std::numeric_limits<std::uint64_t>::max();
 constexpr int kEpollWaitTimeoutMs = 50;
 constexpr std::size_t kMaxEpollEvents = 64;
 constexpr int kMaxAcceptsPerEvent = 64;
@@ -87,6 +89,14 @@ UniqueFd CreateEpoll() {
   return epoll;
 }
 
+UniqueFd CreateWorkerWakeup() {
+  UniqueFd wakeup(::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC));
+  if (!wakeup) {
+    ThrowLastError("eventfd");
+  }
+  return wakeup;
+}
+
 void EpollCtl(int epoll_fd, int operation, int fd, epoll_event* event, const char* operation_name) {
   if (::epoll_ctl(epoll_fd, operation, fd, event) != 0) {
     ThrowLastError(operation_name);
@@ -100,9 +110,18 @@ epoll_event ListenerEvent() {
   return event;
 }
 
-epoll_event ConnectionEvent(ConnectionId id, bool wants_write) {
+epoll_event WorkerWakeupEvent() {
   epoll_event event{};
-  event.events = EPOLLIN | EPOLLRDHUP;
+  event.events = EPOLLIN;
+  event.data.u64 = kWorkerWakeupKey;
+  return event;
+}
+
+epoll_event ConnectionEvent(ConnectionId id, bool wants_read, bool wants_write) {
+  epoll_event event{};
+  if (wants_read) {
+    event.events |= EPOLLIN | EPOLLRDHUP;
+  }
   if (wants_write) {
     event.events |= EPOLLOUT;
   }
@@ -128,21 +147,20 @@ UniqueFd AcceptNonBlocking(int listener_fd) {
   }
 }
 
-bool QueueResponses(Connection& connection, const std::vector<protocol::Message>& messages) {
-  for (const auto& message : messages) {
-    if (!connection.QueueOutput(core::HandleRequest(message))) {
-      return false;
-    }
-  }
-  return true;
-}
-
 }  // namespace
 
-EpollEchoServer::EpollEchoServer(std::uint16_t port)
-    : listener_(CreateListener(port)), epoll_(CreateEpoll()) {
+EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions options)
+    : listener_(CreateListener(port)),
+      epoll_(CreateEpoll()),
+      worker_wakeup_(CreateWorkerWakeup()),
+      worker_pool_(
+          WorkerPoolConfig{.worker_count = options.worker_count,
+                           .queue_capacity = options.work_queue_capacity},
+          [this](WorkResult result) { StoreCompletedWork(std::move(result)); },
+          std::move(options.handler)) {
   port_ = BoundPort(listener_.get());
   AddListenerToEpoll();
+  AddWorkerWakeupToEpoll();
 }
 
 std::uint16_t EpollEchoServer::port() const noexcept {
@@ -170,24 +188,35 @@ void EpollEchoServer::Run() {
     }
 
     for (int i = 0; i < ready_count; ++i) {
-      if (events[static_cast<std::size_t>(i)].data.u64 == kListenerKey) {
+      const auto key = events[static_cast<std::size_t>(i)].data.u64;
+      if (key == kListenerKey) {
         HandleListenerEvent();
         continue;
       }
+      if (key == kWorkerWakeupKey) {
+        HandleWorkerWakeup();
+        continue;
+      }
 
-      HandleConnectionEvent(ConnectionId{events[static_cast<std::size_t>(i)].data.u64},
-                            events[static_cast<std::size_t>(i)].events);
+      HandleConnectionEvent(ConnectionId{key}, events[static_cast<std::size_t>(i)].events);
     }
   }
 }
 
 void EpollEchoServer::Stop() noexcept {
   stop_requested_.store(true, std::memory_order_relaxed);
+  NotifyWorkerWakeup();
 }
 
 void EpollEchoServer::AddListenerToEpoll() {
   auto event = ListenerEvent();
   EpollCtl(epoll_.get(), EPOLL_CTL_ADD, listener_.get(), &event, "epoll_ctl(ADD listener)");
+}
+
+void EpollEchoServer::AddWorkerWakeupToEpoll() {
+  auto event = WorkerWakeupEvent();
+  EpollCtl(epoll_.get(), EPOLL_CTL_ADD, worker_wakeup_.get(), &event,
+           "epoll_ctl(ADD worker wakeup)");
 }
 
 void EpollEchoServer::HandleListenerEvent() {
@@ -203,11 +232,18 @@ void EpollEchoServer::HandleListenerEvent() {
       throw std::runtime_error("registered connection cannot be found");
     }
 
-    auto event = ConnectionEvent(id, connection->has_pending_output());
+    auto [flow_it, inserted] = connection_flows_.emplace(id.value, ConnectionFlow{});
+    if (!inserted) {
+      throw std::runtime_error("connection flow already exists");
+    }
+
+    auto event = ConnectionEvent(id, true, connection->has_pending_output());
     try {
       EpollCtl(epoll_.get(), EPOLL_CTL_ADD, connection->fd(), &event,
                "epoll_ctl(ADD connection)");
+      flow_it->second.registered_with_epoll = true;
     } catch (...) {
+      connection_flows_.erase(id.value);
       [[maybe_unused]] const bool removed = connections_.Remove(id);
       throw;
     }
@@ -220,17 +256,29 @@ void EpollEchoServer::HandleConnectionEvent(ConnectionId id, std::uint32_t event
     return;
   }
 
+  auto flow_it = connection_flows_.find(id.value);
+  if (flow_it == connection_flows_.end()) {
+    RemoveConnection(id);
+    return;
+  }
+
+  auto& flow = flow_it->second;
   bool should_remove = false;
 
-  if ((events & EPOLLIN) != 0U) {
+  if ((events & EPOLLERR) != 0U) {
+    should_remove = true;
+  }
+
+  if (!should_remove && (events & EPOLLIN) != 0U && !flow.close_after_flush) {
     auto read = connection->ReadAvailable();
-    if (!QueueResponses(*connection, read.messages)) {
+    if (!SubmitWork(id, *connection, read.messages)) {
       should_remove = true;
     }
 
-    if (read.status == ReadAvailableStatus::kPeerClosed ||
-        read.status == ReadAvailableStatus::kProtocolError) {
+    if (read.status == ReadAvailableStatus::kProtocolError) {
       should_remove = true;
+    } else if (read.status == ReadAvailableStatus::kPeerClosed) {
+      flow.close_after_flush = true;
     }
   }
 
@@ -241,8 +289,8 @@ void EpollEchoServer::HandleConnectionEvent(ConnectionId id, std::uint32_t event
     }
   }
 
-  if (!should_remove && (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0U) {
-    should_remove = true;
+  if (!should_remove && (events & (EPOLLHUP | EPOLLRDHUP)) != 0U) {
+    flow.close_after_flush = true;
   }
 
   if (should_remove) {
@@ -250,12 +298,147 @@ void EpollEchoServer::HandleConnectionEvent(ConnectionId id, std::uint32_t event
     return;
   }
 
-  UpdateInterest(*connection);
+  if (ShouldCloseAfterFlush(*connection, flow)) {
+    RemoveConnection(id);
+    return;
+  }
+
+  UpdateInterest(*connection, flow);
 }
 
-void EpollEchoServer::UpdateInterest(Connection& connection) {
-  auto event = ConnectionEvent(connection.id(), connection.has_pending_output());
-  EpollCtl(epoll_.get(), EPOLL_CTL_MOD, connection.fd(), &event, "epoll_ctl(MOD connection)");
+void EpollEchoServer::HandleWorkerWakeup() {
+  while (true) {
+    std::uint64_t counter = 0;
+    const auto bytes = ::read(worker_wakeup_.get(), &counter, sizeof(counter));
+    if (bytes == static_cast<ssize_t>(sizeof(counter))) {
+      continue;
+    }
+    if (bytes < 0) {
+      const int saved_errno = errno;
+      if (saved_errno == EINTR) {
+        continue;
+      }
+      if (IsWouldBlock(saved_errno)) {
+        break;
+      }
+      throw SyscallError("read(eventfd)", saved_errno);
+    }
+    if (bytes != 0) {
+      throw std::runtime_error("read(eventfd): short read");
+    }
+    break;
+  }
+
+  std::deque<WorkResult> completed;
+  {
+    std::lock_guard lock(completed_work_mutex_);
+    completed.swap(completed_work_);
+  }
+
+  for (auto& result : completed) {
+    HandleCompletedWork(std::move(result));
+  }
+}
+
+void EpollEchoServer::HandleCompletedWork(WorkResult result) {
+  auto* connection = connections_.Find(result.connection_id);
+  if (connection == nullptr) {
+    return;
+  }
+
+  auto flow_it = connection_flows_.find(result.connection_id.value);
+  if (flow_it == connection_flows_.end()) {
+    return;
+  }
+
+  auto& flow = flow_it->second;
+  flow.completed_responses.emplace(result.sequence, std::move(result.response));
+  (void)FlushReadyResponses(result.connection_id, *connection, flow);
+}
+
+bool EpollEchoServer::SubmitWork(ConnectionId id,
+                                 Connection&,
+                                 const std::vector<protocol::Message>& messages) {
+  auto flow_it = connection_flows_.find(id.value);
+  if (flow_it == connection_flows_.end()) {
+    return false;
+  }
+
+  auto& flow = flow_it->second;
+  for (const auto& message : messages) {
+    WorkItem item{
+        .connection_id = id,
+        .sequence = flow.next_request_sequence,
+        .request = message,
+    };
+
+    if (!worker_pool_.TrySubmit(std::move(item))) {
+      return false;
+    }
+    ++flow.next_request_sequence;
+  }
+
+  return true;
+}
+
+bool EpollEchoServer::FlushReadyResponses(ConnectionId id,
+                                          Connection& connection,
+                                          ConnectionFlow& flow) {
+  while (true) {
+    auto ready = flow.completed_responses.find(flow.next_response_sequence);
+    if (ready == flow.completed_responses.end()) {
+      break;
+    }
+
+    if (!connection.QueueOutput(ready->second)) {
+      RemoveConnection(id);
+      return false;
+    }
+
+    ++flow.next_response_sequence;
+    flow.completed_responses.erase(ready);
+  }
+
+  if (ShouldCloseAfterFlush(connection, flow)) {
+    RemoveConnection(id);
+    return false;
+  }
+
+  UpdateInterest(connection, flow);
+  return true;
+}
+
+bool EpollEchoServer::ShouldCloseAfterFlush(const Connection& connection,
+                                            const ConnectionFlow& flow) const noexcept {
+  return flow.close_after_flush && !connection.has_pending_output() &&
+         flow.next_response_sequence >= flow.next_request_sequence;
+}
+
+void EpollEchoServer::UpdateInterest(Connection& connection, ConnectionFlow& flow) {
+  const bool wants_read = !flow.close_after_flush;
+  const bool wants_write = connection.has_pending_output();
+
+  if (!wants_read && !wants_write) {
+    if (flow.registered_with_epoll) {
+      if (::epoll_ctl(epoll_.get(), EPOLL_CTL_DEL, connection.fd(), nullptr) != 0) {
+        const int saved_errno = errno;
+        if (saved_errno != ENOENT) {
+          throw SyscallError("epoll_ctl(DEL idle connection)", saved_errno);
+        }
+      }
+      flow.registered_with_epoll = false;
+    }
+    return;
+  }
+
+  auto event = ConnectionEvent(connection.id(), wants_read, wants_write);
+  if (flow.registered_with_epoll) {
+    EpollCtl(epoll_.get(), EPOLL_CTL_MOD, connection.fd(), &event, "epoll_ctl(MOD connection)");
+    return;
+  }
+
+  EpollCtl(epoll_.get(), EPOLL_CTL_ADD, connection.fd(), &event, "epoll_ctl(ADD connection)");
+  flow.registered_with_epoll = true;
 }
 
 void EpollEchoServer::RemoveConnection(ConnectionId id) {
@@ -264,14 +447,51 @@ void EpollEchoServer::RemoveConnection(ConnectionId id) {
     return;
   }
 
-  if (::epoll_ctl(epoll_.get(), EPOLL_CTL_DEL, connection->fd(), nullptr) != 0) {
-    const int saved_errno = errno;
-    if (saved_errno != ENOENT) {
-      throw SyscallError("epoll_ctl(DEL connection)", saved_errno);
+  auto flow_it = connection_flows_.find(id.value);
+  const bool registered_with_epoll =
+      flow_it == connection_flows_.end() || flow_it->second.registered_with_epoll;
+
+  if (registered_with_epoll) {
+    if (::epoll_ctl(epoll_.get(), EPOLL_CTL_DEL, connection->fd(), nullptr) != 0) {
+      const int saved_errno = errno;
+      if (saved_errno != ENOENT) {
+        throw SyscallError("epoll_ctl(DEL connection)", saved_errno);
+      }
     }
   }
 
+  connection_flows_.erase(id.value);
   [[maybe_unused]] const bool removed = connections_.Remove(id);
+}
+
+void EpollEchoServer::StoreCompletedWork(WorkResult result) {
+  {
+    std::lock_guard lock(completed_work_mutex_);
+    completed_work_.push_back(std::move(result));
+  }
+  NotifyWorkerWakeup();
+}
+
+void EpollEchoServer::NotifyWorkerWakeup() noexcept {
+  if (!worker_wakeup_) {
+    return;
+  }
+
+  const std::uint64_t counter = 1;
+  while (true) {
+    const auto bytes = ::write(worker_wakeup_.get(), &counter, sizeof(counter));
+    if (bytes == static_cast<ssize_t>(sizeof(counter))) {
+      return;
+    }
+    if (bytes < 0) {
+      const int saved_errno = errno;
+      if (saved_errno == EINTR) {
+        continue;
+      }
+      return;
+    }
+    return;
+  }
 }
 
 }  // namespace pulsecore::network

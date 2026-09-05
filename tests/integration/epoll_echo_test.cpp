@@ -1,5 +1,6 @@
 #include "pulsecore/network/epoll_echo_server.hpp"
 
+#include "pulsecore/core/handler.hpp"
 #include "pulsecore/network/blocking_tcp.hpp"
 
 #include <errno.h>
@@ -7,6 +8,7 @@
 #include <sys/time.h>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <exception>
 #include <optional>
@@ -19,6 +21,8 @@
 
 namespace pulsecore::network {
 namespace {
+
+using namespace std::chrono_literals;
 
 class EpollServerThread {
  public:
@@ -154,6 +158,62 @@ TEST(EpollEchoIntegrationTest, HandlesMultipleFramesOnOneConnection) {
   EXPECT_EQ(second.message->type, protocol::MessageType::kEchoResponse);
   EXPECT_EQ(second.message->request_id, 2U);
   EXPECT_EQ(second.message->payload, (std::vector<protocol::Byte>{0x02, 0x03}));
+}
+
+TEST(EpollEchoIntegrationTest, PreservesResponseOrderWhenWorkersCompleteOutOfOrder) {
+  EpollEchoServerOptions options;
+  options.worker_count = 2;
+  options.work_queue_capacity = 8;
+  options.handler = [](const protocol::Message& request) {
+    if (request.request_id == 1) {
+      std::this_thread::sleep_for(50ms);
+    }
+    return core::HandleRequest(request);
+  };
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  UniqueFd client = ConnectTcp("127.0.0.1", server.port());
+  SendMessage(client.get(), EchoRequest(1, {0x01}));
+  SendMessage(client.get(), EchoRequest(2, {0x02}));
+
+  protocol::FrameDecoder decoder;
+  auto first = ReadMessage(client.get(), decoder);
+  auto second = ReadMessage(client.get(), decoder);
+
+  client.reset();
+  server_thread.StopAndJoin();
+
+  ASSERT_EQ(first.status, ReadMessageStatus::kMessage);
+  ASSERT_EQ(second.status, ReadMessageStatus::kMessage);
+  ASSERT_TRUE(first.message.has_value());
+  ASSERT_TRUE(second.message.has_value());
+  EXPECT_EQ(first.message->request_id, 1U);
+  EXPECT_EQ(second.message->request_id, 2U);
+  EXPECT_EQ(first.message->payload, (std::vector<protocol::Byte>{0x01}));
+  EXPECT_EQ(second.message->payload, (std::vector<protocol::Byte>{0x02}));
+}
+
+TEST(EpollEchoIntegrationTest, FlushesResponseAfterClientHalfClosesWriteSide) {
+  EpollEchoServer server(0);
+  EpollServerThread server_thread(server);
+
+  UniqueFd client = ConnectTcp("127.0.0.1", server.port());
+  SendMessage(client.get(), EchoRequest(9, {0x09}));
+  ASSERT_EQ(::shutdown(client.get(), SHUT_WR), 0);
+
+  protocol::FrameDecoder decoder;
+  auto response = ReadMessage(client.get(), decoder);
+
+  client.reset();
+  server_thread.StopAndJoin();
+
+  ASSERT_EQ(response.status, ReadMessageStatus::kMessage);
+  ASSERT_TRUE(response.message.has_value());
+  EXPECT_EQ(response.message->type, protocol::MessageType::kEchoResponse);
+  EXPECT_EQ(response.message->request_id, 9U);
+  EXPECT_EQ(response.message->payload, (std::vector<protocol::Byte>{0x09}));
 }
 
 TEST(EpollEchoIntegrationTest, ClosesConnectionForMalformedFrameAndKeepsServerRunning) {

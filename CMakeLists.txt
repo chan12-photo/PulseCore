@@ -16,6 +16,7 @@ add_library(pulsecore_core
   src/core/handler.cpp
   src/network/connection_registry.cpp
   src/network/connection.cpp
+  src/network/worker_pool.cpp
   src/network/blocking_tcp.cpp
   src/protocol/codec.cpp
   src/common/unique_fd.cpp
@@ -26,6 +27,11 @@ target_compile_features(pulsecore_core PUBLIC cxx_std_20)
 target_include_directories(pulsecore_core
   PUBLIC
     ${PROJECT_SOURCE_DIR}/include
+)
+
+target_link_libraries(pulsecore_core
+  PUBLIC
+    Threads::Threads
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -119,11 +125,13 @@ if(PULSECORE_BUILD_TESTS)
   FetchContent_MakeAvailable(googletest)
 
   add_executable(pulsecore_unit_tests
+    tests/unit/bounded_queue_test.cpp
     tests/unit/connection_registry_test.cpp
     tests/unit/handler_test.cpp
     tests/unit/nonblocking_connection_test.cpp
     tests/unit/protocol_codec_test.cpp
     tests/unit/unique_fd_test.cpp
+    tests/unit/worker_pool_test.cpp
   )
 
   target_link_libraries(pulsecore_unit_tests

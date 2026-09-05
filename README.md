@@ -20,18 +20,20 @@ Implemented:
 - malformed frame and client disconnect coverage
 - non-blocking connection read/write state tests
 - opaque monotonic connection registry
-- Linux epoll echo server and integration tests
+- bounded work queue
+- worker pool
+- Linux epoll server with `eventfd` worker response wake-up
+- per-connection response ordering for asynchronous worker results
+- Linux epoll integration tests
 - shared request handler for blocking and future reactor paths
 - initial project scope ADR
 - binary protocol framing ADR
 - non-blocking connection model ADR
 - epoll event model ADR
+- worker pool and response path ADR
 
 Not implemented yet:
 
-- worker pool
-- bounded work queue
-- worker response wake-up path
 - graceful shutdown signal path
 - benchmark/profiling
 
