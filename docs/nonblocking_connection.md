@@ -8,6 +8,7 @@ This layer does not use epoll yet. It only proves that one socket can be driven 
 
 - own a connection fd through `UniqueFd`
 - keep an opaque `ConnectionId` separate from the raw fd
+- be stored by a reactor-owned `ConnectionRegistry`
 - read available bytes without blocking
 - preserve partial input in a frame decoder
 - return all complete protocol messages currently buffered
