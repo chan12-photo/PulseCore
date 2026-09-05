@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include <array>
+#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -113,17 +114,24 @@ std::size_t Connection::buffered_input_bytes() const noexcept {
   return decoder_.BufferedSize();
 }
 
-ReadAvailableResult Connection::ReadAvailable() {
+ReadAvailableResult Connection::ReadAvailable(std::size_t max_read_bytes) {
   std::array<protocol::Byte, 4096> bytes{};
   std::vector<protocol::Message> messages;
   bool made_progress = false;
+  std::size_t total_read = 0;
 
   while (true) {
     if (auto error = DrainDecoder(messages); error.has_value()) {
       return ReadAvailableResult::ProtocolError(*error, std::move(messages));
     }
 
-    const auto received = ::recv(fd_.get(), bytes.data(), bytes.size(), 0);
+    if (total_read >= max_read_bytes) {
+      return ReadAvailableResult::Ok(std::move(messages));
+    }
+
+    const auto read_budget = max_read_bytes - total_read;
+    const auto bytes_to_read = std::min(bytes.size(), read_budget);
+    const auto received = ::recv(fd_.get(), bytes.data(), bytes_to_read, 0);
     if (received < 0) {
       const int saved_errno = errno;
       if (saved_errno == EINTR) {
@@ -146,6 +154,7 @@ ReadAvailableResult Connection::ReadAvailable() {
     }
 
     made_progress = true;
+    total_read += static_cast<std::size_t>(received);
     decoder_.Append(std::span<const protocol::Byte>(bytes.data(),
                                                     static_cast<std::size_t>(received)));
 
@@ -175,19 +184,25 @@ bool Connection::QueueOutput(const protocol::Message& message) {
   return true;
 }
 
-WriteAvailableResult Connection::WriteAvailable() {
+WriteAvailableResult Connection::WriteAvailable(std::size_t max_write_bytes) {
   WriteAvailableResult result{.status = WriteAvailableStatus::kOk};
 
   while (output_offset_ < output_buffer_.size()) {
+    if (result.bytes_written >= max_write_bytes) {
+      return result;
+    }
+
 #ifdef MSG_NOSIGNAL
     constexpr int send_flags = MSG_NOSIGNAL;
 #else
     constexpr int send_flags = 0;
 #endif
 
-    const auto sent =
-        ::send(fd_.get(), output_buffer_.data() + output_offset_,
-               output_buffer_.size() - output_offset_, send_flags);
+    const auto remaining_budget = max_write_bytes - result.bytes_written;
+    const auto pending = output_buffer_.size() - output_offset_;
+    const auto bytes_to_write = std::min(pending, remaining_budget);
+    const auto sent = ::send(fd_.get(), output_buffer_.data() + output_offset_,
+                             bytes_to_write, send_flags);
 
     if (sent < 0) {
       const int saved_errno = errno;

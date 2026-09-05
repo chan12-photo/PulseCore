@@ -115,6 +115,34 @@ TEST(EpollEchoIntegrationTest, EchoesSingleRequestOverTcp) {
   EXPECT_EQ(response.payload, (std::vector<protocol::Byte>{0x41, 0x42, 0x43}));
 }
 
+TEST(EpollEchoIntegrationTest, EchoesRequestWithSmallPerEventBudgets) {
+  EpollEchoServerOptions options;
+  options.max_read_bytes_per_event = 5;
+  options.max_write_bytes_per_event = 5;
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  const auto response = SendRequestAndReadResponse("127.0.0.1", server.port(),
+                                                  EchoRequest(43, {0x41, 0x42, 0x43}));
+
+  server_thread.StopAndJoin();
+
+  EXPECT_EQ(response.type, protocol::MessageType::kEchoResponse);
+  EXPECT_EQ(response.request_id, 43U);
+  EXPECT_EQ(response.payload, (std::vector<protocol::Byte>{0x41, 0x42, 0x43}));
+}
+
+TEST(EpollEchoIntegrationTest, RejectsZeroPerEventBudgets) {
+  EpollEchoServerOptions read_options;
+  read_options.max_read_bytes_per_event = 0;
+  EXPECT_THROW(EpollEchoServer server(0, read_options), std::invalid_argument);
+
+  EpollEchoServerOptions write_options;
+  write_options.max_write_bytes_per_event = 0;
+  EXPECT_THROW(EpollEchoServer server(0, write_options), std::invalid_argument);
+}
+
 TEST(EpollEchoIntegrationTest, HandlesMultipleClients) {
   EpollEchoServer server(0);
   EpollServerThread server_thread(server);

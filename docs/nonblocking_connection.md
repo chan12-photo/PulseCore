@@ -15,6 +15,13 @@ This layer does not use epoll yet. It only proves that one socket can be driven 
 - track pending output bytes and write offset
 - avoid unbounded output growth through a configured limit
 - preserve pending output after partial writes and `EAGAIN`
+- limit read/write work with per-call byte budgets
+
+## Fairness Budgets
+
+`ReadAvailable` and `WriteAvailable` accept per-call byte budgets. The defaults are 64 KiB for reads and 64 KiB for writes.
+
+The reactor passes these budgets on every readiness event so one busy connection cannot spend unbounded time inside a single event callback.
 
 ## Current Statuses
 
@@ -31,4 +38,4 @@ Write:
 - `kWouldBlock`: socket cannot accept more bytes now
 - `kPeerClosed`: peer closed or reset the connection
 
-The future epoll reactor will use these statuses to decide whether to keep reading, pause a connection, enable `EPOLLOUT`, or close the connection.
+The epoll reactor uses these statuses to decide whether to keep reading, pause a connection, enable `EPOLLOUT`, or close the connection.

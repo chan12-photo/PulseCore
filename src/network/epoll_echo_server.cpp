@@ -44,6 +44,13 @@ bool IsWouldBlock(int error) noexcept {
   return error == EAGAIN || error == EWOULDBLOCK;
 }
 
+std::size_t RequirePositiveBudget(std::size_t value, const char* name) {
+  if (value == 0) {
+    throw std::invalid_argument(std::string(name) + " must be greater than zero");
+  }
+  return value;
+}
+
 sigset_t BuildSignalSet(const std::vector<int>& signals) {
   sigset_t signal_set{};
   if (::sigemptyset(&signal_set) != 0) {
@@ -219,6 +226,10 @@ EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions opti
       signal_mask_state_(BlockShutdownSignals(options.shutdown_signals)),
       worker_wakeup_(CreateWorkerWakeup()),
       shutdown_signal_(CreateShutdownSignalFd(options.shutdown_signals)),
+      max_read_bytes_per_event_(
+          RequirePositiveBudget(options.max_read_bytes_per_event, "max read bytes per event")),
+      max_write_bytes_per_event_(
+          RequirePositiveBudget(options.max_write_bytes_per_event, "max write bytes per event")),
       worker_pool_(
           WorkerPoolConfig{.worker_count = options.worker_count,
                            .queue_capacity = options.work_queue_capacity},
@@ -359,7 +370,7 @@ void EpollEchoServer::HandleConnectionEvent(ConnectionId id, std::uint32_t event
   }
 
   if (!should_remove && (events & EPOLLIN) != 0U && !flow.close_after_flush) {
-    auto read = connection->ReadAvailable();
+    auto read = connection->ReadAvailable(max_read_bytes_per_event_);
     if (!SubmitWork(id, *connection, read.messages)) {
       should_remove = true;
     }
@@ -372,7 +383,7 @@ void EpollEchoServer::HandleConnectionEvent(ConnectionId id, std::uint32_t event
   }
 
   if (!should_remove && (events & EPOLLOUT) != 0U) {
-    const auto write = connection->WriteAvailable();
+    const auto write = connection->WriteAvailable(max_write_bytes_per_event_);
     if (write.status == WriteAvailableStatus::kPeerClosed) {
       should_remove = true;
     }

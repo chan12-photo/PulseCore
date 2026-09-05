@@ -25,6 +25,8 @@ struct ShutdownSignalMaskState {
 struct EpollEchoServerOptions {
   std::size_t worker_count{2};
   std::size_t work_queue_capacity{1024};
+  std::size_t max_read_bytes_per_event{kDefaultMaxReadBytesPerEvent};
+  std::size_t max_write_bytes_per_event{kDefaultMaxWriteBytesPerEvent};
   WorkHandler handler{::pulsecore::core::HandleRequest};
   std::vector<int> shutdown_signals;
 };
@@ -85,6 +87,8 @@ class EpollEchoServer {
   std::mutex completed_work_mutex_;
   std::deque<WorkResult> completed_work_;
   std::atomic_bool stop_requested_{false};
+  std::size_t max_read_bytes_per_event_{kDefaultMaxReadBytesPerEvent};
+  std::size_t max_write_bytes_per_event_{kDefaultMaxWriteBytesPerEvent};
   WorkerPool worker_pool_;
 };
 

@@ -184,6 +184,31 @@ TEST(NonBlockingConnectionTest, ReadsMultipleFramesFromOneReadableEvent) {
   EXPECT_EQ(result.messages[1].payload, (std::vector<protocol::Byte>{0x02, 0x03}));
 }
 
+TEST(NonBlockingConnectionTest, ReadAvailableHonorsReadByteBudget) {
+  auto pair = MakeSocketPair();
+  SetNonBlocking(pair.connection_end.get());
+
+  Connection connection(ConnectionId{7}, std::move(pair.connection_end));
+  const auto first = EncodeOrDie(EchoRequest(1, {0x01}));
+  const auto second = EncodeOrDie(EchoRequest(2, {0x02}));
+
+  SendBytes(pair.peer_end.get(), first);
+  SendBytes(pair.peer_end.get(), second);
+
+  auto result = connection.ReadAvailable(first.size());
+
+  ASSERT_EQ(result.status, ReadAvailableStatus::kOk);
+  ASSERT_EQ(result.messages.size(), 1U);
+  EXPECT_EQ(result.messages[0].request_id, 1U);
+  EXPECT_EQ(connection.buffered_input_bytes(), 0U);
+
+  result = connection.ReadAvailable(second.size());
+
+  ASSERT_EQ(result.status, ReadAvailableStatus::kOk);
+  ASSERT_EQ(result.messages.size(), 1U);
+  EXPECT_EQ(result.messages[0].request_id, 2U);
+}
+
 TEST(NonBlockingConnectionTest, ReportsPeerClosed) {
   auto pair = MakeSocketPair();
   SetNonBlocking(pair.connection_end.get());
@@ -292,6 +317,43 @@ TEST(NonBlockingConnectionTest, PreservesPendingOutputAfterWouldBlock) {
   }
 
   EXPECT_EQ(decoder.BufferedSize(), 0U);
+}
+
+TEST(NonBlockingConnectionTest, WriteAvailableHonorsWriteByteBudget) {
+  auto pair = MakeSocketPair();
+  SetNonBlocking(pair.connection_end.get());
+  SetReceiveTimeout(pair.peer_end.get());
+
+  Connection connection(ConnectionId{7}, std::move(pair.connection_end));
+  const auto first_message = EchoResponse(1, {0x01});
+  const auto second_message = EchoResponse(2, {0x02});
+  const auto first = EncodeOrDie(first_message);
+
+  ASSERT_TRUE(connection.QueueOutput(first_message));
+  ASSERT_TRUE(connection.QueueOutput(second_message));
+
+  auto write_result = connection.WriteAvailable(first.size());
+
+  EXPECT_EQ(write_result.status, WriteAvailableStatus::kOk);
+  EXPECT_EQ(write_result.bytes_written, first.size());
+  EXPECT_TRUE(connection.has_pending_output());
+
+  protocol::FrameDecoder decoder;
+  std::array<protocol::Byte, 128> bytes{};
+  const auto received = ::recv(pair.peer_end.get(), bytes.data(), bytes.size(), 0);
+  ASSERT_EQ(received, static_cast<ssize_t>(first.size()));
+
+  decoder.Append(std::span<const protocol::Byte>(bytes.data(), static_cast<std::size_t>(received)));
+  const auto decoded = decoder.Next();
+  ASSERT_EQ(decoded.status, protocol::DecodeStatus::kDecoded);
+  ASSERT_TRUE(decoded.message.has_value());
+  EXPECT_EQ(decoded.message->request_id, 1U);
+  EXPECT_EQ(decoder.BufferedSize(), 0U);
+
+  write_result = connection.WriteAvailable();
+
+  EXPECT_EQ(write_result.status, WriteAvailableStatus::kOk);
+  EXPECT_FALSE(connection.has_pending_output());
 }
 
 TEST(NonBlockingConnectionTest, RejectsOutputAboveConfiguredLimit) {

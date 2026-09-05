@@ -23,6 +23,9 @@ struct ConnectionLimits {
   std::size_t max_output_buffer{protocol::kHeaderSize + protocol::kMaxPayloadSize};
 };
 
+constexpr std::size_t kDefaultMaxReadBytesPerEvent = 64U * 1024U;
+constexpr std::size_t kDefaultMaxWriteBytesPerEvent = 64U * 1024U;
+
 enum class ReadAvailableStatus {
   kOk,
   kWouldBlock,
@@ -67,9 +70,11 @@ class Connection {
   [[nodiscard]] std::size_t pending_output_bytes() const noexcept;
   [[nodiscard]] std::size_t buffered_input_bytes() const noexcept;
 
-  [[nodiscard]] ReadAvailableResult ReadAvailable();
+  [[nodiscard]] ReadAvailableResult ReadAvailable(
+      std::size_t max_read_bytes = kDefaultMaxReadBytesPerEvent);
   [[nodiscard]] bool QueueOutput(const protocol::Message& message);
-  [[nodiscard]] WriteAvailableResult WriteAvailable();
+  [[nodiscard]] WriteAvailableResult WriteAvailable(
+      std::size_t max_write_bytes = kDefaultMaxWriteBytesPerEvent);
 
  private:
   std::optional<protocol::ProtocolError> DrainDecoder(std::vector<protocol::Message>& messages);

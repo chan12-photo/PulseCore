@@ -25,6 +25,7 @@ Implemented:
 - Linux epoll server with `eventfd` worker response wake-up
 - Linux `signalfd` shutdown path for SIGINT/SIGTERM in the epoll server app
 - per-connection response ordering for asynchronous worker results
+- per-event read/write byte budgets for reactor fairness
 - Linux epoll integration tests
 - shared request handler for blocking and future reactor paths
 - initial project scope ADR
@@ -33,6 +34,7 @@ Implemented:
 - epoll event model ADR
 - worker pool and response path ADR
 - graceful shutdown signal path ADR
+- reactor fairness budget ADR
 
 Not implemented yet:
 
