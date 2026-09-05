@@ -4,8 +4,8 @@ PulseCore is a C++20/Linux event-processing engine portfolio project.
 
 The Core goal is to build a TCP server engine with explicit binary framing, non-blocking I/O, an epoll reactor, bounded queues, worker threads, graceful shutdown, tests, sanitizers, benchmarks, perf profiling, and one evidence-based optimization.
 
-This repository is currently at the Linux epoll reactor, benchmark, and first measured
-optimization step.
+This repository is currently at the Linux epoll reactor, benchmark, perf profiling, and first
+measured optimization step.
 
 ## Current Scope
 
@@ -28,6 +28,7 @@ Implemented:
 - per-connection response ordering for asynchronous worker results
 - per-event read/write byte budgets for reactor fairness
 - Linux epoll loopback benchmark executable
+- Linux perf profiling notes for the benchmark
 - evidence-based hot-path copy reduction optimization
 - Linux epoll integration tests
 - shared request handler for blocking and future reactor paths
@@ -40,9 +41,9 @@ Implemented:
 - reactor fairness budget ADR
 - hot-path copy reduction ADR
 
-Not implemented yet:
+Future native-Linux follow-up:
 
-- perf profiling
+- hardware-counter profiling on a non-virtualized Linux host
 
 ## Build
 
@@ -79,6 +80,11 @@ cmake --preset release
 cmake --build --preset release
 ./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2
 ```
+
+## Profiling
+
+See `docs/profiling.md` for the Linux `perf stat` and `perf record` evidence gathered against the
+epoll loopback benchmark.
 
 ## Release Build
 
