@@ -1,6 +1,7 @@
 #include "pulsecore/core/handler.hpp"
 
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace pulsecore::core {
@@ -13,18 +14,26 @@ std::vector<protocol::Byte> ErrorPayload(std::string_view message) {
 }  // namespace
 
 protocol::Message HandleRequest(const protocol::Message& request) {
+  return HandleOwnedRequest(protocol::Message{
+      .type = request.type,
+      .request_id = request.request_id,
+      .payload = request.payload,
+  });
+}
+
+protocol::Message HandleOwnedRequest(protocol::Message request) {
   switch (request.type) {
     case protocol::MessageType::kEchoRequest:
       return protocol::Message{
           .type = protocol::MessageType::kEchoResponse,
           .request_id = request.request_id,
-          .payload = request.payload,
+          .payload = std::move(request.payload),
       };
     case protocol::MessageType::kWorkRequest:
       return protocol::Message{
           .type = protocol::MessageType::kWorkResponse,
           .request_id = request.request_id,
-          .payload = request.payload,
+          .payload = std::move(request.payload),
       };
     case protocol::MessageType::kEchoResponse:
     case protocol::MessageType::kWorkResponse:

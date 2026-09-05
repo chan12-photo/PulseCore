@@ -17,6 +17,8 @@ The reactor uses `TryPush` only, so it does not block on worker saturation.
 ## Worker Semantics
 
 `WorkerPool` consumes `WorkItem` values and emits `WorkResult` values through a completion callback.
+The work handler receives each decoded request by value, allowing the default request handler to
+move payload storage into the response on the asynchronous path.
 
 Each item carries:
 

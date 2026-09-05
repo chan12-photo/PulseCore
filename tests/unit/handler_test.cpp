@@ -30,6 +30,18 @@ TEST(HandlerTest, WorkRequestReturnsWorkResponseWithSameRequestIdAndPayload) {
   EXPECT_EQ(response.payload, (std::vector<protocol::Byte>{0xAA}));
 }
 
+TEST(HandlerTest, OwnedEchoRequestReturnsEchoResponseWithSameRequestIdAndPayload) {
+  auto response = HandleOwnedRequest(protocol::Message{
+      .type = protocol::MessageType::kEchoRequest,
+      .request_id = 123,
+      .payload = {0x10, 0x20},
+  });
+
+  EXPECT_EQ(response.type, protocol::MessageType::kEchoResponse);
+  EXPECT_EQ(response.request_id, 123U);
+  EXPECT_EQ(response.payload, (std::vector<protocol::Byte>{0x10, 0x20}));
+}
+
 TEST(HandlerTest, ResponseMessageFromClientReturnsErrorResponse) {
   const auto response = HandleRequest(protocol::Message{
       .type = protocol::MessageType::kEchoResponse,

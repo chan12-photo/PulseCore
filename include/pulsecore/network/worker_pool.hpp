@@ -30,14 +30,14 @@ struct WorkerPoolConfig {
   std::size_t queue_capacity{1024};
 };
 
-using WorkHandler = std::function<protocol::Message(const protocol::Message&)>;
+using WorkHandler = std::function<protocol::Message(protocol::Message)>;
 using WorkCompletion = std::function<void(WorkResult)>;
 
 class WorkerPool {
  public:
   WorkerPool(WorkerPoolConfig config,
              WorkCompletion on_complete,
-             WorkHandler handler = ::pulsecore::core::HandleRequest);
+             WorkHandler handler = ::pulsecore::core::HandleOwnedRequest);
   ~WorkerPool();
 
   WorkerPool(const WorkerPool&) = delete;

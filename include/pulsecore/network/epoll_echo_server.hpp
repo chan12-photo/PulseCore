@@ -27,7 +27,7 @@ struct EpollEchoServerOptions {
   std::size_t work_queue_capacity{1024};
   std::size_t max_read_bytes_per_event{kDefaultMaxReadBytesPerEvent};
   std::size_t max_write_bytes_per_event{kDefaultMaxWriteBytesPerEvent};
-  WorkHandler handler{::pulsecore::core::HandleRequest};
+  WorkHandler handler{::pulsecore::core::HandleOwnedRequest};
   std::vector<int> shutdown_signals;
 };
 
@@ -62,9 +62,7 @@ class EpollEchoServer {
   void HandleWorkerWakeup();
   void HandleShutdownSignal();
   void HandleCompletedWork(WorkResult result);
-  [[nodiscard]] bool SubmitWork(ConnectionId id,
-                                Connection& connection,
-                                const std::vector<protocol::Message>& messages);
+  [[nodiscard]] bool SubmitWork(ConnectionId id, std::vector<protocol::Message>& messages);
   [[nodiscard]] bool FlushReadyResponses(ConnectionId id,
                                          Connection& connection,
                                          ConnectionFlow& flow);

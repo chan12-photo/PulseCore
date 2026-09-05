@@ -56,7 +56,7 @@ std::size_t WorkerPool::pending_work_count() const {
 
 void WorkerPool::WorkerLoop() {
   while (auto item = queue_.Pop()) {
-    auto response = handler_(item->request);
+    auto response = handler_(std::move(item->request));
     on_complete_(WorkResult{
         .connection_id = item->connection_id,
         .sequence = item->sequence,

@@ -48,3 +48,42 @@ round_trip_frame_mib_per_second=14.02
 ```
 
 This is a local smoke baseline, not a production capacity claim.
+
+## Hot-Path Copy Reduction
+
+Date: 2026-09-06
+
+Environment: same Ubuntu 24.04 Docker container on local arm64 host.
+
+Change measured:
+
+- move decoded request messages into the worker queue instead of copying them
+- let the default worker handler move echo/work payload storage into the response
+- move a freshly encoded frame into an empty connection output buffer instead of copying it
+
+The benchmark was run three times before and after the change, then compared by median value.
+
+16 KiB payload command:
+
+```bash
+./pulsecore_epoll_benchmark --clients 4 --requests-per-client 500 --payload-size 16384 --workers 2
+```
+
+| Variant | Requests/sec runs | Median requests/sec | Median MiB/sec |
+| --- | ---: | ---: | ---: |
+| Before | 49015.75, 32735.43, 39442.55 | 39442.55 | 1234.08 |
+| After | 51863.24, 53673.44, 49966.69 | 51863.24 | 1622.70 |
+
+64 KiB payload command:
+
+```bash
+./pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 65536 --workers 2
+```
+
+| Variant | Requests/sec runs | Median requests/sec | Median MiB/sec |
+| --- | ---: | ---: | ---: |
+| Before | 29890.05, 26014.58, 33205.08 | 29890.05 | 3737.40 |
+| After | 34495.21, 34698.55, 34467.86 | 34495.21 | 4313.22 |
+
+Result: the measured median improved by 31.49% for the 16 KiB payload run and 15.41% for the
+64 KiB payload run.

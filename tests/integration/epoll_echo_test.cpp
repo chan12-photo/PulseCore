@@ -203,11 +203,11 @@ TEST(EpollEchoIntegrationTest, PreservesResponseOrderWhenWorkersCompleteOutOfOrd
   EpollEchoServerOptions options;
   options.worker_count = 2;
   options.work_queue_capacity = 8;
-  options.handler = [](const protocol::Message& request) {
+  options.handler = [](protocol::Message request) {
     if (request.request_id == 1) {
       std::this_thread::sleep_for(50ms);
     }
-    return core::HandleRequest(request);
+    return core::HandleOwnedRequest(std::move(request));
   };
 
   EpollEchoServer server(0, std::move(options));

@@ -371,7 +371,7 @@ void EpollEchoServer::HandleConnectionEvent(ConnectionId id, std::uint32_t event
 
   if (!should_remove && (events & EPOLLIN) != 0U && !flow.close_after_flush) {
     auto read = connection->ReadAvailable(max_read_bytes_per_event_);
-    if (!SubmitWork(id, *connection, read.messages)) {
+    if (!SubmitWork(id, read.messages)) {
       should_remove = true;
     }
 
@@ -481,20 +481,18 @@ void EpollEchoServer::HandleCompletedWork(WorkResult result) {
   (void)FlushReadyResponses(result.connection_id, *connection, flow);
 }
 
-bool EpollEchoServer::SubmitWork(ConnectionId id,
-                                 Connection&,
-                                 const std::vector<protocol::Message>& messages) {
+bool EpollEchoServer::SubmitWork(ConnectionId id, std::vector<protocol::Message>& messages) {
   auto flow_it = connection_flows_.find(id.value);
   if (flow_it == connection_flows_.end()) {
     return false;
   }
 
   auto& flow = flow_it->second;
-  for (const auto& message : messages) {
+  for (auto& message : messages) {
     WorkItem item{
         .connection_id = id,
         .sequence = flow.next_request_sequence,
-        .request = message,
+        .request = std::move(message),
     };
 
     if (!worker_pool_.TrySubmit(std::move(item))) {

@@ -180,6 +180,12 @@ bool Connection::QueueOutput(const protocol::Message& message) {
     return false;
   }
 
+  if (pending == 0) {
+    output_buffer_ = std::move(*encoded);
+    output_offset_ = 0;
+    return true;
+  }
+
   output_buffer_.insert(output_buffer_.end(), encoded->begin(), encoded->end());
   return true;
 }
