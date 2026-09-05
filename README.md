@@ -90,6 +90,15 @@ cmake --build --preset release
 See `docs/profiling.md` for the Linux `perf stat` and `perf record` evidence gathered against the
 epoll loopback benchmark.
 
+## Documentation
+
+- `docs/architecture.md`: component map, request lifecycle, invariants, and backpressure policy
+- `docs/protocol.md`: binary frame format and protocol rules
+- `docs/testing.md`: local verification commands, CI matrix, and covered behaviors
+- `docs/benchmark.md`: benchmark methodology, baseline, and before/after optimization data
+- `docs/profiling.md`: Linux `perf stat` and `perf record` notes
+- `docs/adr/`: short architecture decision records
+
 ## Release Build
 
 ```bash
