@@ -37,17 +37,23 @@ ReadAvailableResult ReadAvailableResult::Ok(std::vector<protocol::Message> messa
   return ReadAvailableResult{
       .status = ReadAvailableStatus::kOk,
       .messages = std::move(messages),
+      .protocol_error = std::nullopt,
   };
 }
 
 ReadAvailableResult ReadAvailableResult::WouldBlock() {
-  return ReadAvailableResult{.status = ReadAvailableStatus::kWouldBlock};
+  return ReadAvailableResult{
+      .status = ReadAvailableStatus::kWouldBlock,
+      .messages = {},
+      .protocol_error = std::nullopt,
+  };
 }
 
 ReadAvailableResult ReadAvailableResult::PeerClosed(std::vector<protocol::Message> messages) {
   return ReadAvailableResult{
       .status = ReadAvailableStatus::kPeerClosed,
       .messages = std::move(messages),
+      .protocol_error = std::nullopt,
   };
 }
 

@@ -56,19 +56,30 @@ std::uint64_t ReadU64(std::span<const Byte> bytes, std::size_t offset) {
 }  // namespace
 
 DecodeResult DecodeResult::NeedMoreData() noexcept {
-  return DecodeResult{.status = DecodeStatus::kNeedMoreData};
+  return DecodeResult{
+      .status = DecodeStatus::kNeedMoreData,
+      .message = std::nullopt,
+      .error = std::nullopt,
+      .bytes_consumed = 0,
+  };
 }
 
 DecodeResult DecodeResult::Decoded(Message message, std::size_t bytes_consumed) {
   return DecodeResult{
       .status = DecodeStatus::kDecoded,
       .message = std::move(message),
+      .error = std::nullopt,
       .bytes_consumed = bytes_consumed,
   };
 }
 
 DecodeResult DecodeResult::Error(ProtocolError error) noexcept {
-  return DecodeResult{.status = DecodeStatus::kError, .error = error};
+  return DecodeResult{
+      .status = DecodeStatus::kError,
+      .message = std::nullopt,
+      .error = error,
+      .bytes_consumed = 0,
+  };
 }
 
 bool IsKnownMessageType(std::uint16_t type) noexcept {

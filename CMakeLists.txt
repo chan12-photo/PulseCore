@@ -28,6 +28,18 @@ target_include_directories(pulsecore_core
     ${PROJECT_SOURCE_DIR}/include
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_sources(pulsecore_core
+    PRIVATE
+      src/network/epoll_echo_server.cpp
+  )
+
+  target_compile_definitions(pulsecore_core
+    PUBLIC
+      PULSECORE_HAS_EPOLL=1
+  )
+endif()
+
 if(PULSECORE_ENABLE_WARNINGS)
   target_compile_options(pulsecore_core
     PRIVATE
@@ -66,6 +78,26 @@ if(PULSECORE_ENABLE_WARNINGS)
       $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic>
       $<$<CXX_COMPILER_ID:MSVC>:/W4>
   )
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(pulsecore_epoll_server
+    apps/epoll_server/main.cpp
+  )
+
+  target_link_libraries(pulsecore_epoll_server
+    PRIVATE
+      pulsecore_core
+      Threads::Threads
+  )
+
+  if(PULSECORE_ENABLE_WARNINGS)
+    target_compile_options(pulsecore_epoll_server
+      PRIVATE
+        $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic>
+        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+    )
+  endif()
 endif()
 
 if(PULSECORE_BUILD_TESTS)
@@ -131,4 +163,27 @@ if(PULSECORE_BUILD_TESTS)
   endif()
 
   gtest_discover_tests(pulsecore_integration_tests)
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(pulsecore_epoll_integration_tests
+      tests/integration/epoll_echo_test.cpp
+    )
+
+    target_link_libraries(pulsecore_epoll_integration_tests
+      PRIVATE
+        pulsecore_core
+        GTest::gtest_main
+        Threads::Threads
+    )
+
+    if(PULSECORE_ENABLE_WARNINGS)
+      target_compile_options(pulsecore_epoll_integration_tests
+        PRIVATE
+          $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic>
+          $<$<CXX_COMPILER_ID:MSVC>:/W4>
+      )
+    endif()
+
+    gtest_discover_tests(pulsecore_epoll_integration_tests)
+  endif()
 endif()

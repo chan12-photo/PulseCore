@@ -145,16 +145,22 @@ ReadMessageResult ReadMessageResult::Message(protocol::Message message) {
   return ReadMessageResult{
       .status = ReadMessageStatus::kMessage,
       .message = std::move(message),
+      .protocol_error = std::nullopt,
   };
 }
 
 ReadMessageResult ReadMessageResult::Closed() noexcept {
-  return ReadMessageResult{.status = ReadMessageStatus::kClosed};
+  return ReadMessageResult{
+      .status = ReadMessageStatus::kClosed,
+      .message = std::nullopt,
+      .protocol_error = std::nullopt,
+  };
 }
 
 ReadMessageResult ReadMessageResult::ProtocolError(protocol::ProtocolError error) noexcept {
   return ReadMessageResult{
       .status = ReadMessageStatus::kProtocolError,
+      .message = std::nullopt,
       .protocol_error = error,
   };
 }
