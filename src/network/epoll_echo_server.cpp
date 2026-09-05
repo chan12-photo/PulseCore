@@ -3,8 +3,11 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <pthread.h>
+#include <signal.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -23,6 +26,7 @@ namespace {
 constexpr int kListenBacklog = 128;
 constexpr std::uint64_t kListenerKey = 0;
 constexpr std::uint64_t kWorkerWakeupKey = std::numeric_limits<std::uint64_t>::max();
+constexpr std::uint64_t kShutdownSignalKey = std::numeric_limits<std::uint64_t>::max() - 1;
 constexpr int kEpollWaitTimeoutMs = 50;
 constexpr std::size_t kMaxEpollEvents = 64;
 constexpr int kMaxAcceptsPerEvent = 64;
@@ -38,6 +42,46 @@ void ThrowLastError(const char* operation) {
 
 bool IsWouldBlock(int error) noexcept {
   return error == EAGAIN || error == EWOULDBLOCK;
+}
+
+sigset_t BuildSignalSet(const std::vector<int>& signals) {
+  sigset_t signal_set{};
+  if (::sigemptyset(&signal_set) != 0) {
+    ThrowLastError("sigemptyset");
+  }
+
+  for (const int signal : signals) {
+    if (::sigaddset(&signal_set, signal) != 0) {
+      ThrowLastError("sigaddset");
+    }
+  }
+
+  return signal_set;
+}
+
+ShutdownSignalMaskState BlockShutdownSignals(const std::vector<int>& signals) {
+  ShutdownSignalMaskState state{};
+  if (signals.empty()) {
+    return state;
+  }
+
+  const auto signal_set = BuildSignalSet(signals);
+  const int result = ::pthread_sigmask(SIG_BLOCK, &signal_set, &state.previous_mask);
+  if (result != 0) {
+    throw SyscallError("pthread_sigmask(SIG_BLOCK)", result);
+  }
+
+  state.active = true;
+  return state;
+}
+
+void RestoreSignalMask(ShutdownSignalMaskState& state) noexcept {
+  if (!state.active) {
+    return;
+  }
+
+  (void)::pthread_sigmask(SIG_SETMASK, &state.previous_mask, nullptr);
+  state.active = false;
 }
 
 sockaddr_in LoopbackAddress(std::uint16_t port) {
@@ -97,6 +141,19 @@ UniqueFd CreateWorkerWakeup() {
   return wakeup;
 }
 
+UniqueFd CreateShutdownSignalFd(const std::vector<int>& signals) {
+  if (signals.empty()) {
+    return UniqueFd{};
+  }
+
+  const auto signal_set = BuildSignalSet(signals);
+  UniqueFd signal_fd(::signalfd(-1, &signal_set, SFD_NONBLOCK | SFD_CLOEXEC));
+  if (!signal_fd) {
+    ThrowLastError("signalfd");
+  }
+  return signal_fd;
+}
+
 void EpollCtl(int epoll_fd, int operation, int fd, epoll_event* event, const char* operation_name) {
   if (::epoll_ctl(epoll_fd, operation, fd, event) != 0) {
     ThrowLastError(operation_name);
@@ -114,6 +171,13 @@ epoll_event WorkerWakeupEvent() {
   epoll_event event{};
   event.events = EPOLLIN;
   event.data.u64 = kWorkerWakeupKey;
+  return event;
+}
+
+epoll_event ShutdownSignalEvent() {
+  epoll_event event{};
+  event.events = EPOLLIN;
+  event.data.u64 = kShutdownSignalKey;
   return event;
 }
 
@@ -152,7 +216,9 @@ UniqueFd AcceptNonBlocking(int listener_fd) {
 EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions options)
     : listener_(CreateListener(port)),
       epoll_(CreateEpoll()),
+      signal_mask_state_(BlockShutdownSignals(options.shutdown_signals)),
       worker_wakeup_(CreateWorkerWakeup()),
+      shutdown_signal_(CreateShutdownSignalFd(options.shutdown_signals)),
       worker_pool_(
           WorkerPoolConfig{.worker_count = options.worker_count,
                            .queue_capacity = options.work_queue_capacity},
@@ -161,6 +227,13 @@ EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions opti
   port_ = BoundPort(listener_.get());
   AddListenerToEpoll();
   AddWorkerWakeupToEpoll();
+  AddShutdownSignalToEpoll();
+}
+
+EpollEchoServer::~EpollEchoServer() {
+  Stop();
+  worker_pool_.Stop();
+  RestoreSignalMask(signal_mask_state_);
 }
 
 std::uint16_t EpollEchoServer::port() const noexcept {
@@ -187,7 +260,7 @@ void EpollEchoServer::Run() {
       throw SyscallError("epoll_wait", saved_errno);
     }
 
-    for (int i = 0; i < ready_count; ++i) {
+    for (int i = 0; i < ready_count && !stop_requested_.load(std::memory_order_relaxed); ++i) {
       const auto key = events[static_cast<std::size_t>(i)].data.u64;
       if (key == kListenerKey) {
         HandleListenerEvent();
@@ -197,10 +270,16 @@ void EpollEchoServer::Run() {
         HandleWorkerWakeup();
         continue;
       }
+      if (key == kShutdownSignalKey) {
+        HandleShutdownSignal();
+        continue;
+      }
 
       HandleConnectionEvent(ConnectionId{key}, events[static_cast<std::size_t>(i)].events);
     }
   }
+
+  CloseAllConnections();
 }
 
 void EpollEchoServer::Stop() noexcept {
@@ -217,6 +296,16 @@ void EpollEchoServer::AddWorkerWakeupToEpoll() {
   auto event = WorkerWakeupEvent();
   EpollCtl(epoll_.get(), EPOLL_CTL_ADD, worker_wakeup_.get(), &event,
            "epoll_ctl(ADD worker wakeup)");
+}
+
+void EpollEchoServer::AddShutdownSignalToEpoll() {
+  if (!shutdown_signal_) {
+    return;
+  }
+
+  auto event = ShutdownSignalEvent();
+  EpollCtl(epoll_.get(), EPOLL_CTL_ADD, shutdown_signal_.get(), &event,
+           "epoll_ctl(ADD shutdown signal)");
 }
 
 void EpollEchoServer::HandleListenerEvent() {
@@ -337,6 +426,31 @@ void EpollEchoServer::HandleWorkerWakeup() {
 
   for (auto& result : completed) {
     HandleCompletedWork(std::move(result));
+  }
+}
+
+void EpollEchoServer::HandleShutdownSignal() {
+  while (true) {
+    signalfd_siginfo signal_info{};
+    const auto bytes = ::read(shutdown_signal_.get(), &signal_info, sizeof(signal_info));
+    if (bytes == static_cast<ssize_t>(sizeof(signal_info))) {
+      stop_requested_.store(true, std::memory_order_relaxed);
+      continue;
+    }
+    if (bytes < 0) {
+      const int saved_errno = errno;
+      if (saved_errno == EINTR) {
+        continue;
+      }
+      if (IsWouldBlock(saved_errno)) {
+        break;
+      }
+      throw SyscallError("read(signalfd)", saved_errno);
+    }
+    if (bytes != 0) {
+      throw std::runtime_error("read(signalfd): short read");
+    }
+    break;
   }
 }
 
@@ -462,6 +576,12 @@ void EpollEchoServer::RemoveConnection(ConnectionId id) {
 
   connection_flows_.erase(id.value);
   [[maybe_unused]] const bool removed = connections_.Remove(id);
+}
+
+void EpollEchoServer::CloseAllConnections() {
+  while (!connection_flows_.empty()) {
+    RemoveConnection(ConnectionId{connection_flows_.begin()->first});
+  }
 }
 
 void EpollEchoServer::StoreCompletedWork(WorkResult result) {

@@ -4,8 +4,10 @@
 #include "pulsecore/network/blocking_tcp.hpp"
 
 #include <errno.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #include <array>
 #include <chrono>
@@ -48,6 +50,15 @@ class EpollServerThread {
 
   void StopAndJoin() {
     server_.Stop();
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+    if (error_ != nullptr) {
+      std::rethrow_exception(error_);
+    }
+  }
+
+  void Join() {
     if (thread_.joinable()) {
       thread_.join();
     }
@@ -214,6 +225,21 @@ TEST(EpollEchoIntegrationTest, FlushesResponseAfterClientHalfClosesWriteSide) {
   EXPECT_EQ(response.message->type, protocol::MessageType::kEchoResponse);
   EXPECT_EQ(response.message->request_id, 9U);
   EXPECT_EQ(response.message->payload, (std::vector<protocol::Byte>{0x09}));
+}
+
+TEST(EpollEchoIntegrationTest, StopsWhenConfiguredShutdownSignalArrives) {
+  EpollEchoServerOptions options;
+  options.worker_count = 1;
+  options.work_queue_capacity = 4;
+  options.shutdown_signals = {SIGUSR1};
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  ASSERT_EQ(::kill(::getpid(), SIGUSR1), 0);
+  server_thread.Join();
+
+  EXPECT_EQ(server.live_connection_count(), 0U);
 }
 
 TEST(EpollEchoIntegrationTest, ClosesConnectionForMalformedFrameAndKeepsServerRunning) {

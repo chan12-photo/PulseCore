@@ -38,4 +38,4 @@ Responses are held in a per-connection sequence map until every earlier response
 
 - queue-full policy closes the affected connection
 - no timeout/cancellation for long-running work
-- no production signal handling path yet
+- shutdown closes live connections before worker completion results are drained

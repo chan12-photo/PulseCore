@@ -24,6 +24,7 @@ The reactor:
 - enables `EPOLLOUT` only while a connection has pending output
 - removes malformed or closed connections through the reactor path
 - uses a reserved epoll key for worker completion wake-ups
+- uses a reserved epoll key for shutdown signal wake-ups
 
 Edge-triggered epoll, multi-reactor designs, CPU pinning, and advanced wake-up optimizations are not part of this step.
 
@@ -31,4 +32,4 @@ Edge-triggered epoll, multi-reactor designs, CPU pinning, and advanced wake-up o
 
 The event loop can serve multiple clients without a thread per connection while preserving the existing per-connection read/write tests.
 
-The worker response path now uses `eventfd`; production signal handling is still deferred to a later graceful-shutdown step.
+The worker response path uses `eventfd`. The server app now uses `signalfd` for SIGINT/SIGTERM so shutdown is handled in the reactor loop instead of an async signal handler.
