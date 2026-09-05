@@ -141,6 +141,10 @@ TEST(EpollEchoIntegrationTest, RejectsZeroPerEventBudgets) {
   EpollEchoServerOptions write_options;
   write_options.max_write_bytes_per_event = 0;
   EXPECT_THROW(EpollEchoServer server(0, write_options), std::invalid_argument);
+
+  EpollEchoServerOptions in_flight_options;
+  in_flight_options.max_in_flight_requests_per_connection = 0;
+  EXPECT_THROW(EpollEchoServer server(0, in_flight_options), std::invalid_argument);
 }
 
 TEST(EpollEchoIntegrationTest, HandlesMultipleClients) {
@@ -232,6 +236,41 @@ TEST(EpollEchoIntegrationTest, PreservesResponseOrderWhenWorkersCompleteOutOfOrd
   EXPECT_EQ(second.message->request_id, 2U);
   EXPECT_EQ(first.message->payload, (std::vector<protocol::Byte>{0x01}));
   EXPECT_EQ(second.message->payload, (std::vector<protocol::Byte>{0x02}));
+}
+
+TEST(EpollEchoIntegrationTest, ClosesConnectionWhenPerConnectionInFlightLimitIsExceeded) {
+  EpollEchoServerOptions options;
+  options.worker_count = 1;
+  options.work_queue_capacity = 8;
+  options.max_in_flight_requests_per_connection = 1;
+  options.handler = [](protocol::Message request) {
+    std::this_thread::sleep_for(50ms);
+    return core::HandleOwnedRequest(std::move(request));
+  };
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  UniqueFd client = ConnectTcp("127.0.0.1", server.port());
+  SetReceiveTimeout(client.get());
+
+  const auto first = protocol::EncodeMessage(EchoRequest(1, {0x01}));
+  const auto second = protocol::EncodeMessage(EchoRequest(2, {0x02}));
+  ASSERT_TRUE(first.has_value());
+  ASSERT_TRUE(second.has_value());
+
+  std::vector<protocol::Byte> requests;
+  requests.insert(requests.end(), first->begin(), first->end());
+  requests.insert(requests.end(), second->begin(), second->end());
+  SendBytes(client.get(), requests);
+
+  std::array<protocol::Byte, 1> byte{};
+  const auto received = ::recv(client.get(), byte.data(), byte.size(), 0);
+
+  client.reset();
+  server_thread.StopAndJoin();
+
+  EXPECT_TRUE(received == 0 || (received < 0 && errno == ECONNRESET));
 }
 
 TEST(EpollEchoIntegrationTest, FlushesResponseAfterClientHalfClosesWriteSide) {

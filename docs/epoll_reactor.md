@@ -14,6 +14,7 @@ It is intentionally still simple:
 - worker completions wake the reactor with `eventfd`
 - configured shutdown signals wake the reactor with `signalfd`
 - per-connection response ordering is preserved with sequence numbers
+- per-connection in-flight requests are bounded
 - per-event read/write byte budgets limit work done for one connection at a time
 - `EPOLLOUT` is enabled only while a connection has pending output
 
@@ -23,11 +24,19 @@ Client events store the opaque `ConnectionId` in `epoll_event.data.u64`. `Connec
 
 This avoids treating a reusable fd number as the identity of a logical client connection.
 
+## Backpressure
+
+The worker queue is globally bounded, and each connection also has a configurable in-flight request
+limit. A request is considered in flight after it is accepted by the reactor and before its ordered
+response is queued or the connection is closed.
+
+The first overload policy is conservative: queue saturation or per-connection in-flight saturation
+closes the affected connection.
+
 ## Current Limitations
 
 This is not the final C2 architecture yet.
 
-- queue-full policy closes the affected connection
 - shutdown closes live connections instead of draining every pending response
 - fairness is byte-budget based, not priority or latency scheduled
 

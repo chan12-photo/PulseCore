@@ -230,6 +230,9 @@ EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions opti
           RequirePositiveBudget(options.max_read_bytes_per_event, "max read bytes per event")),
       max_write_bytes_per_event_(
           RequirePositiveBudget(options.max_write_bytes_per_event, "max write bytes per event")),
+      max_in_flight_requests_per_connection_(RequirePositiveBudget(
+          options.max_in_flight_requests_per_connection,
+          "max in-flight requests per connection")),
       worker_pool_(
           WorkerPoolConfig{.worker_count = options.worker_count,
                            .queue_capacity = options.work_queue_capacity},
@@ -489,6 +492,11 @@ bool EpollEchoServer::SubmitWork(ConnectionId id, std::vector<protocol::Message>
 
   auto& flow = flow_it->second;
   for (auto& message : messages) {
+    const auto in_flight = flow.next_request_sequence - flow.next_response_sequence;
+    if (in_flight >= max_in_flight_requests_per_connection_) {
+      return false;
+    }
+
     WorkItem item{
         .connection_id = id,
         .sequence = flow.next_request_sequence,

@@ -26,6 +26,7 @@ Implemented:
 - Linux epoll server with `eventfd` worker response wake-up
 - Linux `signalfd` shutdown path for SIGINT/SIGTERM in the epoll server app
 - per-connection response ordering for asynchronous worker results
+- per-connection in-flight request limit
 - per-event read/write byte budgets for reactor fairness
 - Linux epoll loopback benchmark executable
 - Linux perf profiling notes for the benchmark
@@ -40,6 +41,7 @@ Implemented:
 - graceful shutdown signal path ADR
 - reactor fairness budget ADR
 - hot-path copy reduction ADR
+- per-connection in-flight limit ADR
 
 Future native-Linux follow-up:
 
