@@ -1,0 +1,82 @@
+# PulseCore
+
+PulseCore is a C++20/Linux event-processing engine portfolio project.
+
+The Core goal is to build a TCP server engine with explicit binary framing, non-blocking I/O, an epoll reactor, bounded queues, worker threads, graceful shutdown, tests, sanitizers, benchmarks, perf profiling, and one evidence-based optimization.
+
+This repository is currently at C0: build/test foundation.
+
+## Current Scope
+
+Implemented:
+
+- CMake project skeleton
+- GoogleTest unit test setup
+- move-only `UniqueFd` RAII wrapper
+- explicit 20-byte binary protocol header
+- protocol encoder/decoder unit tests
+- blocking TCP echo server/client reference
+- loopback TCP integration tests
+- malformed frame and client disconnect coverage
+- non-blocking connection read/write state tests
+- initial project scope ADR
+- binary protocol framing ADR
+- non-blocking connection model ADR
+
+Not implemented yet:
+
+- epoll reactor
+- worker pool
+- benchmark/profiling
+
+## Build
+
+```bash
+cmake --preset dev
+cmake --build --preset dev
+ctest --preset dev
+```
+
+## Run Blocking Echo Reference
+
+```bash
+./build/dev/pulsecore_server 9000
+```
+
+```bash
+./build/dev/pulsecore_client 9000 hello
+```
+
+## Release Build
+
+```bash
+cmake --preset release
+cmake --build --preset release
+ctest --preset release
+```
+
+## Sanitizers
+
+```bash
+cmake --preset asan-ubsan
+cmake --build --preset asan-ubsan
+ctest --preset asan-ubsan
+```
+
+```bash
+cmake --preset tsan
+cmake --build --preset tsan
+ctest --preset tsan
+```
+
+## Non-goals Before C3
+
+- Trading simulator
+- EdgeVision runtime
+- Qt device controller
+- lock-free queue
+- memory pool
+- `io_uring`
+- DPDK
+- Kafka/Redis/cloud deployment
+- HFT claims

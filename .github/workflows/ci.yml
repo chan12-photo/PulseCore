@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    name: ${{ matrix.compiler }} ${{ matrix.preset }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            preset: dev
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            preset: dev
+            cc: clang
+            cxx: clang++
+          - compiler: clang
+            preset: asan-ubsan
+            cc: clang
+            cxx: clang++
+          - compiler: clang
+            preset: tsan
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
