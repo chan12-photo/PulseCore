@@ -74,7 +74,7 @@ Linux-only epoll tests and benchmark smoke can also be reproduced from macOS wit
 ./scripts/check_linux_docker.sh
 ```
 
-## Run Blocking Echo Reference
+## Run Blocking Reference
 
 ```bash
 ./build/dev/pulsecore_server 9000
@@ -82,9 +82,10 @@ Linux-only epoll tests and benchmark smoke can also be reproduced from macOS wit
 
 ```bash
 ./build/dev/pulsecore_client 9000 hello
+./build/dev/pulsecore_client 9000 seed --message-type work --work-iterations 1000
 ```
 
-## Run epoll Echo Server On Linux
+## Run epoll Server On Linux
 
 ```bash
 ./build/dev/pulsecore_epoll_server 9000
@@ -92,6 +93,7 @@ Linux-only epoll tests and benchmark smoke can also be reproduced from macOS wit
 
 ```bash
 ./build/dev/pulsecore_client 9000 hello
+./build/dev/pulsecore_client 9000 seed --message-type work --work-iterations 1000
 ```
 
 ## Run epoll Loopback Benchmark On Linux

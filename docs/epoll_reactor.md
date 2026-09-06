@@ -14,7 +14,7 @@ It is intentionally still simple:
 - worker completions wake the reactor with `eventfd`
 - configured shutdown signals wake the reactor with `signalfd`
 - per-connection response ordering is preserved with sequence numbers
-- per-connection in-flight requests are bounded
+- live connections, per-connection buffers, and per-connection in-flight requests are bounded
 - per-event read/write byte budgets limit work done for one connection at a time
 - `EPOLLOUT` is enabled only while a connection has pending output
 
@@ -32,6 +32,9 @@ response is queued or the connection is closed.
 
 The first overload policy is conservative: queue saturation or per-connection in-flight saturation
 closes the affected connection.
+
+The same `pulsecore_client` binary can send echo requests or deterministic work requests to the epoll
+server. Work requests exercise the worker path with bounded CPU work and digest validation.
 
 ## Current Limitations
 

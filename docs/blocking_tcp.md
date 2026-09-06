@@ -9,6 +9,7 @@ Its job is to prove:
 - protocol frames can be sent over TCP
 - one connection may contain multiple frames
 - request IDs are preserved in responses
+- echo and deterministic work requests share the same blocking reference path
 - malformed input closes only the offending connection
 - peer disconnect returns cleanly from the blocking reference server
 
@@ -31,5 +32,17 @@ Send one echo request:
 Expected output:
 
 ```text
-response type=2 request_id=1 payload="hello"
+response type=echo_response request_id=1 payload_hex=68656c6c6f
+```
+
+Send one deterministic work request:
+
+```bash
+./build/dev/pulsecore_client 9000 seed --message-type work --work-iterations 1000
+```
+
+Expected output shape:
+
+```text
+response type=work_response request_id=1 payload_hex=<8-byte digest>
 ```
