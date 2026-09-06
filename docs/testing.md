@@ -84,7 +84,7 @@ Last local verification date: 2026-09-06.
 | macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 60/60 passed |
 | macOS TSan | `ctest --preset tsan --output-on-failure` | 60/60 passed |
 | macOS profile | `ctest --preset profile --output-on-failure` | 60/60 passed |
-| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 72/72 passed; echo/work benchmark smoke passed |
+| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 73/73 passed; echo/work benchmark smoke passed |
 
 The macOS runs exclude Linux-only epoll tests because `epoll`, `eventfd`, and `signalfd` are Linux
 APIs. The Linux Docker run includes the epoll server tests.
@@ -127,6 +127,7 @@ Integration tests cover:
 - multiple clients over the epoll reactor
 - work request/response over the epoll reactor
 - max connection limit enforcement
+- output buffer limit enforcement over the epoll reactor
 - small per-event I/O budgets
 - per-connection response ordering when workers complete out of order
 - per-connection in-flight saturation

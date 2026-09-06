@@ -32,6 +32,7 @@ struct EpollEchoServerOptions {
   std::size_t max_write_bytes_per_event{kDefaultMaxWriteBytesPerEvent};
   std::size_t max_connections{kDefaultMaxConnections};
   std::size_t max_in_flight_requests_per_connection{kDefaultMaxInFlightRequestsPerConnection};
+  ConnectionLimits connection_limits;
   WorkHandler handler{::pulsecore::core::HandleOwnedRequest};
   std::vector<int> shutdown_signals;
 };

@@ -176,6 +176,14 @@ TEST(EpollEchoIntegrationTest, RejectsZeroPerEventBudgets) {
   EpollEchoServerOptions connection_options;
   connection_options.max_connections = 0;
   EXPECT_THROW(EpollEchoServer server(0, connection_options), std::invalid_argument);
+
+  EpollEchoServerOptions input_options;
+  input_options.connection_limits.max_input_buffer = 0;
+  EXPECT_THROW(EpollEchoServer server(0, input_options), std::invalid_argument);
+
+  EpollEchoServerOptions output_options;
+  output_options.connection_limits.max_output_buffer = 0;
+  EXPECT_THROW(EpollEchoServer server(0, output_options), std::invalid_argument);
 }
 
 TEST(EpollEchoIntegrationTest, HandlesMultipleClients) {
@@ -248,6 +256,26 @@ TEST(EpollEchoIntegrationTest, ClosesConnectionsAboveConfiguredLimit) {
   EXPECT_EQ(response.message->type, protocol::MessageType::kEchoResponse);
   EXPECT_EQ(response.message->request_id, 77U);
   EXPECT_EQ(response.message->payload, (std::vector<protocol::Byte>{0x77}));
+}
+
+TEST(EpollEchoIntegrationTest, ClosesConnectionWhenOutputLimitWouldBeExceeded) {
+  EpollEchoServerOptions options;
+  options.connection_limits.max_output_buffer = protocol::kHeaderSize;
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  UniqueFd client = ConnectTcp("127.0.0.1", server.port());
+  SetReceiveTimeout(client.get());
+  SendMessage(client.get(), EchoRequest(1, {0x01}));
+
+  std::array<protocol::Byte, 1> byte{};
+  const auto received = ::recv(client.get(), byte.data(), byte.size(), 0);
+
+  client.reset();
+  server_thread.StopAndJoin();
+
+  EXPECT_TRUE(received == 0 || (received < 0 && errno == ECONNRESET));
 }
 
 TEST(EpollEchoIntegrationTest, HandlesMultipleFramesOnOneConnection) {

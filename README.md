@@ -20,6 +20,7 @@ Implemented:
 - loopback TCP integration tests
 - malformed frame and client disconnect coverage
 - non-blocking connection read/write state tests
+- configurable connection input/output buffer limits
 - opaque monotonic connection registry
 - bounded work queue
 - worker pool
@@ -47,6 +48,7 @@ Implemented:
 - per-connection in-flight limit ADR
 - deterministic work request ADR
 - max connection limit ADR
+- configurable connection buffer limit ADR
 
 Future native-Linux follow-up:
 

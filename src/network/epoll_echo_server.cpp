@@ -51,6 +51,12 @@ std::size_t RequirePositiveBudget(std::size_t value, const char* name) {
   return value;
 }
 
+ConnectionLimits RequireConnectionLimits(ConnectionLimits limits) {
+  limits.max_input_buffer = RequirePositiveBudget(limits.max_input_buffer, "max input buffer");
+  limits.max_output_buffer = RequirePositiveBudget(limits.max_output_buffer, "max output buffer");
+  return limits;
+}
+
 sigset_t BuildSignalSet(const std::vector<int>& signals) {
   sigset_t signal_set{};
   if (::sigemptyset(&signal_set) != 0) {
@@ -226,6 +232,7 @@ EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions opti
       signal_mask_state_(BlockShutdownSignals(options.shutdown_signals)),
       worker_wakeup_(CreateWorkerWakeup()),
       shutdown_signal_(CreateShutdownSignalFd(options.shutdown_signals)),
+      connections_(RequireConnectionLimits(options.connection_limits)),
       max_read_bytes_per_event_(
           RequirePositiveBudget(options.max_read_bytes_per_event, "max read bytes per event")),
       max_write_bytes_per_event_(

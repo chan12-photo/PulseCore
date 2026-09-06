@@ -39,6 +39,9 @@ and work requests, which run a deterministic bounded CPU workload and return an 
 work path gives the worker pool and backpressure tests a repeatable non-trivial workload without
 making external service calls or relying on timing-sensitive behavior.
 
+Connection input and output buffer limits are configurable through `ConnectionLimits` and applied by
+the connection registry when the epoll server accepts new clients.
+
 ## Request Lifecycle
 
 1. The listener accepts a client with `accept4(..., SOCK_NONBLOCK | SOCK_CLOEXEC)`.
