@@ -77,6 +77,7 @@ The first overload policy is intentionally conservative:
 - max connection limit reached: accept and close the new connection
 - worker queue full: close the affected connection
 - per-connection in-flight limit reached: close the affected connection
+- input buffer high-water mark exceeded: close the affected connection
 - output buffer high-water mark exceeded: close the affected connection
 
 The policy favors clear resource bounds and simple failure behavior over partial degradation.

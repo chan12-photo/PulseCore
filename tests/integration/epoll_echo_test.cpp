@@ -278,6 +278,26 @@ TEST(EpollEchoIntegrationTest, ClosesConnectionWhenOutputLimitWouldBeExceeded) {
   EXPECT_TRUE(received == 0 || (received < 0 && errno == ECONNRESET));
 }
 
+TEST(EpollEchoIntegrationTest, ClosesConnectionWhenInputLimitWouldBeExceeded) {
+  EpollEchoServerOptions options;
+  options.connection_limits.max_input_buffer = protocol::kHeaderSize - 1U;
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  UniqueFd client = ConnectTcp("127.0.0.1", server.port());
+  SetReceiveTimeout(client.get());
+  SendMessage(client.get(), EchoRequest(1, {}));
+
+  std::array<protocol::Byte, 1> byte{};
+  const auto received = ::recv(client.get(), byte.data(), byte.size(), 0);
+
+  client.reset();
+  server_thread.StopAndJoin();
+
+  EXPECT_TRUE(received == 0 || (received < 0 && errno == ECONNRESET));
+}
+
 TEST(EpollEchoIntegrationTest, HandlesMultipleFramesOnOneConnection) {
   EpollEchoServer server(0);
   EpollServerThread server_thread(server);

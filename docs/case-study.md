@@ -39,14 +39,14 @@ Two request types are implemented:
 Current verification date: 2026-09-06.
 
 - macOS local presets: dev, release, ASan/UBSan, TSan, and profile all pass 60/60 tests
-- Ubuntu 24.04 Docker release run passes 72/72 tests, including Linux-only epoll tests
+- Ubuntu 24.04 Docker release run passes 74/74 tests, including Linux-only epoll tests
 - Docker smoke checks run both echo and deterministic work benchmark modes
 - `git diff --check` is part of the local check script
 
 The tests cover protocol golden bytes, fragmented and coalesced frames, malformed input, partial
 writes, byte budgets, queue saturation, worker pool shutdown, stale response discard, response
-ordering, in-flight request limits, max connection limits, signal shutdown, and TCP work
-request/response paths.
+ordering, in-flight request limits, max connection limits, input/output buffer limits, signal
+shutdown, and TCP work request/response paths.
 
 ## Performance Evidence
 

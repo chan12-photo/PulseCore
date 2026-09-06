@@ -16,8 +16,8 @@ unit-level `Connection` coverage for buffer overflow behavior.
 buffer limits are greater than zero, then passes those limits into `ConnectionRegistry` so every newly
 accepted connection receives the configured bounds.
 
-The epoll integration tests configure a small output limit and verify that a response frame that would
-exceed the limit closes the affected connection.
+The epoll integration tests configure small input and output limits and verify that request or
+response frames that exceed the configured limits close the affected connection.
 
 ## Consequences
 
