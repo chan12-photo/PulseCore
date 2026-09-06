@@ -211,5 +211,17 @@ if(PULSECORE_BUILD_TESTS)
     endif()
 
     gtest_discover_tests(pulsecore_epoll_integration_tests)
+
+    add_test(NAME EpollServerCliHelp COMMAND pulsecore_epoll_server --help)
+    add_test(
+      NAME EpollServerCliRejectsUnknownOption
+      COMMAND pulsecore_epoll_server --unknown-option
+    )
+    add_test(NAME EpollServerCliRejectsZeroWorkers COMMAND pulsecore_epoll_server --workers 0)
+    set_tests_properties(
+      EpollServerCliRejectsUnknownOption
+      EpollServerCliRejectsZeroWorkers
+      PROPERTIES WILL_FAIL TRUE
+    )
   endif()
 endif()

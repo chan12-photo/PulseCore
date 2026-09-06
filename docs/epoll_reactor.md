@@ -36,6 +36,25 @@ closes the affected connection.
 The same `pulsecore_client` binary can send echo requests or deterministic work requests to the epoll
 server. Work requests exercise the worker path with bounded CPU work and digest validation.
 
+## Runtime Configuration
+
+The `pulsecore_epoll_server` app exposes the main reactor limits as CLI options:
+
+```bash
+./build/release/pulsecore_epoll_server 9000 \
+  --workers 4 \
+  --queue-capacity 2048 \
+  --max-connections 1024 \
+  --max-in-flight 128 \
+  --max-read-bytes 65536 \
+  --max-write-bytes 65536 \
+  --max-input-buffer 65556 \
+  --max-output-buffer 65556
+```
+
+These flags map directly to `EpollEchoServerOptions`, so manual demos and benchmark experiments can
+use the same resource policy knobs as the integration tests.
+
 ## Current Limitations
 
 This is not the final C2 architecture yet.

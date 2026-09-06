@@ -17,6 +17,7 @@ responses while keeping ownership and overload behavior explicit.
 - Linux `epoll`, `eventfd`, and `signalfd` integration
 - Opaque monotonic `ConnectionId` values to avoid fd reuse bugs
 - Bounded queues, buffers, live connections, and per-connection in-flight requests
+- Runtime CLI controls for epoll worker and resource limits
 - Per-connection response ordering across asynchronous worker completion
 - Sanitizer, Docker, benchmark, and profiling evidence
 
@@ -39,14 +40,14 @@ Two request types are implemented:
 Current verification date: 2026-09-06.
 
 - macOS local presets: dev, release, ASan/UBSan, TSan, and profile all pass 60/60 tests
-- Ubuntu 24.04 Docker release run passes 74/74 tests, including Linux-only epoll tests
+- Ubuntu 24.04 Docker release run passes 77/77 tests, including Linux-only epoll and CLI smoke tests
 - Docker smoke checks run both echo and deterministic work benchmark modes
 - `git diff --check` is part of the local check script
 
 The tests cover protocol golden bytes, fragmented and coalesced frames, malformed input, partial
 writes, byte budgets, queue saturation, worker pool shutdown, stale response discard, response
-ordering, in-flight request limits, max connection limits, input/output buffer limits, signal
-shutdown, and TCP work request/response paths.
+ordering, in-flight request limits, max connection limits, input/output buffer limits, epoll server
+CLI validation, signal shutdown, and TCP work request/response paths.
 
 ## Performance Evidence
 

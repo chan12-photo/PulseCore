@@ -28,6 +28,7 @@ Implemented:
 - Linux epoll server with `eventfd` worker response wake-up
 - Linux `signalfd` shutdown path for SIGINT/SIGTERM in the epoll server app
 - max connection limit for the epoll server
+- runtime CLI controls for epoll worker and connection resource limits
 - per-connection response ordering for asynchronous worker results
 - per-connection in-flight request limit
 - per-event read/write byte budgets for reactor fairness
@@ -89,6 +90,11 @@ Linux-only epoll tests and benchmark smoke can also be reproduced from macOS wit
 
 ```bash
 ./build/dev/pulsecore_epoll_server 9000
+./build/dev/pulsecore_epoll_server 9000 \
+  --workers 4 \
+  --queue-capacity 2048 \
+  --max-connections 1024 \
+  --max-in-flight 128
 ```
 
 ```bash

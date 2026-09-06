@@ -40,7 +40,9 @@ work path gives the worker pool and backpressure tests a repeatable non-trivial 
 making external service calls or relying on timing-sensitive behavior.
 
 Connection input and output buffer limits are configurable through `ConnectionLimits` and applied by
-the connection registry when the epoll server accepts new clients.
+the connection registry when the epoll server accepts new clients. The epoll server app also exposes
+worker count, queue capacity, live connection limit, in-flight limit, byte budgets, and buffer limits
+as CLI options for manual runs.
 
 ## Request Lifecycle
 
