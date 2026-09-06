@@ -230,6 +230,7 @@ EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions opti
           RequirePositiveBudget(options.max_read_bytes_per_event, "max read bytes per event")),
       max_write_bytes_per_event_(
           RequirePositiveBudget(options.max_write_bytes_per_event, "max write bytes per event")),
+      max_connections_(RequirePositiveBudget(options.max_connections, "max connections")),
       max_in_flight_requests_per_connection_(RequirePositiveBudget(
           options.max_in_flight_requests_per_connection,
           "max in-flight requests per connection")),
@@ -327,6 +328,9 @@ void EpollEchoServer::HandleListenerEvent() {
     UniqueFd client = AcceptNonBlocking(listener_.get());
     if (!client) {
       return;
+    }
+    if (connections_.size() >= max_connections_) {
+      continue;
     }
 
     const auto id = connections_.Add(std::move(client));

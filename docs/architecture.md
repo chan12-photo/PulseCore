@@ -60,8 +60,8 @@ making external service calls or relying on timing-sensitive behavior.
 - The reactor owns socket registration, connection removal, and final writes.
 - Worker threads never write to sockets directly.
 - Reactor submission to the worker queue is non-blocking.
-- Input payloads, output buffers, worker queue capacity, and per-connection in-flight requests are
-  bounded.
+- Live connections, input payloads, output buffers, worker queue capacity, and per-connection
+  in-flight requests are bounded.
 - Client-visible response order is preserved per connection.
 - Stale worker results are discarded instead of being delivered to a reused fd.
 - Shutdown wakes the reactor with `signalfd` for configured signals and `eventfd` for explicit stop.
@@ -71,6 +71,7 @@ making external service calls or relying on timing-sensitive behavior.
 The first overload policy is intentionally conservative:
 
 - malformed frame: close the affected connection
+- max connection limit reached: accept and close the new connection
 - worker queue full: close the affected connection
 - per-connection in-flight limit reached: close the affected connection
 - output buffer high-water mark exceeded: close the affected connection

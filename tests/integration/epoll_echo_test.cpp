@@ -172,6 +172,10 @@ TEST(EpollEchoIntegrationTest, RejectsZeroPerEventBudgets) {
   EpollEchoServerOptions in_flight_options;
   in_flight_options.max_in_flight_requests_per_connection = 0;
   EXPECT_THROW(EpollEchoServer server(0, in_flight_options), std::invalid_argument);
+
+  EpollEchoServerOptions connection_options;
+  connection_options.max_connections = 0;
+  EXPECT_THROW(EpollEchoServer server(0, connection_options), std::invalid_argument);
 }
 
 TEST(EpollEchoIntegrationTest, HandlesMultipleClients) {
@@ -201,6 +205,49 @@ TEST(EpollEchoIntegrationTest, HandlesMultipleClients) {
     EXPECT_EQ(responses[i]->request_id, 100U + i);
     EXPECT_EQ(responses[i]->payload, (std::vector<protocol::Byte>{static_cast<protocol::Byte>(i)}));
   }
+}
+
+TEST(EpollEchoIntegrationTest, ClosesConnectionsAboveConfiguredLimit) {
+  EpollEchoServerOptions options;
+  options.max_connections = 1;
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  UniqueFd first = ConnectTcp("127.0.0.1", server.port());
+  UniqueFd rejected = ConnectTcp("127.0.0.1", server.port());
+  SetNonBlocking(rejected.get());
+
+  bool rejected_closed = false;
+  const auto deadline = std::chrono::steady_clock::now() + 1s;
+  while (std::chrono::steady_clock::now() < deadline) {
+    std::array<protocol::Byte, 1> byte{};
+    const auto received = ::recv(rejected.get(), byte.data(), byte.size(), 0);
+    if (received == 0 || (received < 0 && errno == ECONNRESET)) {
+      rejected_closed = true;
+      break;
+    }
+    if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+      std::this_thread::sleep_for(1ms);
+      continue;
+    }
+    FAIL() << "unexpected recv result while waiting for rejected connection close";
+  }
+
+  SendMessage(first.get(), EchoRequest(77, {0x77}));
+  protocol::FrameDecoder decoder;
+  auto response = ReadMessage(first.get(), decoder);
+
+  first.reset();
+  rejected.reset();
+  server_thread.StopAndJoin();
+
+  EXPECT_TRUE(rejected_closed);
+  ASSERT_EQ(response.status, ReadMessageStatus::kMessage);
+  ASSERT_TRUE(response.message.has_value());
+  EXPECT_EQ(response.message->type, protocol::MessageType::kEchoResponse);
+  EXPECT_EQ(response.message->request_id, 77U);
+  EXPECT_EQ(response.message->payload, (std::vector<protocol::Byte>{0x77}));
 }
 
 TEST(EpollEchoIntegrationTest, HandlesMultipleFramesOnOneConnection) {

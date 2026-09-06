@@ -17,6 +17,7 @@
 
 namespace pulsecore::network {
 
+constexpr std::size_t kDefaultMaxConnections = 1024U;
 constexpr std::size_t kDefaultMaxInFlightRequestsPerConnection = 1024U;
 
 struct ShutdownSignalMaskState {
@@ -29,6 +30,7 @@ struct EpollEchoServerOptions {
   std::size_t work_queue_capacity{1024};
   std::size_t max_read_bytes_per_event{kDefaultMaxReadBytesPerEvent};
   std::size_t max_write_bytes_per_event{kDefaultMaxWriteBytesPerEvent};
+  std::size_t max_connections{kDefaultMaxConnections};
   std::size_t max_in_flight_requests_per_connection{kDefaultMaxInFlightRequestsPerConnection};
   WorkHandler handler{::pulsecore::core::HandleOwnedRequest};
   std::vector<int> shutdown_signals;
@@ -90,6 +92,7 @@ class EpollEchoServer {
   std::atomic_bool stop_requested_{false};
   std::size_t max_read_bytes_per_event_{kDefaultMaxReadBytesPerEvent};
   std::size_t max_write_bytes_per_event_{kDefaultMaxWriteBytesPerEvent};
+  std::size_t max_connections_{kDefaultMaxConnections};
   std::size_t max_in_flight_requests_per_connection_{kDefaultMaxInFlightRequestsPerConnection};
   WorkerPool worker_pool_;
 };
