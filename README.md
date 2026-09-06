@@ -55,6 +55,18 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
+## Full Local Check
+
+```bash
+./scripts/check_local.sh
+```
+
+Linux-only epoll tests and benchmark smoke can also be reproduced from macOS with Docker:
+
+```bash
+./scripts/check_linux_docker.sh
+```
+
 ## Run Blocking Echo Reference
 
 ```bash

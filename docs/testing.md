@@ -6,6 +6,18 @@ thread checks, and GitHub Actions for Linux CI.
 
 ## Local Commands
 
+Full local check:
+
+```bash
+./scripts/check_local.sh
+```
+
+Linux Docker check:
+
+```bash
+./scripts/check_linux_docker.sh
+```
+
 Development build:
 
 ```bash
