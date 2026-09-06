@@ -3,21 +3,36 @@
 PulseCore includes a Linux-only loopback benchmark executable:
 
 ```bash
-./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2
+./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2 --message-type echo
 ```
 
-The benchmark starts an in-process epoll server, launches client threads, sends framed echo requests over TCP loopback, validates every response, and reports end-to-end throughput plus round-trip latency percentiles.
+The benchmark starts an in-process epoll server, launches client threads, sends framed requests over
+TCP loopback, validates every response, and reports end-to-end throughput plus round-trip latency
+percentiles. It can run either echo requests or deterministic synthetic work requests.
 
 ## Options
 
 - `--clients N`: number of client threads
 - `--requests-per-client N`: synchronous request/response exchanges per client
-- `--payload-size N`: echo payload bytes per request
+- `--payload-size N`: seed payload bytes per request
 - `--workers N`: worker threads used by the epoll server
+- `--message-type echo|work`: request type to send, default `echo`
+- `--work-iterations N`: deterministic work iterations per request, default `1000`, maximum `1000000`
 
 Latency is measured in each client thread from immediately before `SendMessage()` to immediately
 after the response has been decoded and validated. Percentiles use nearest-rank selection over all
 client requests in the run.
+
+For echo mode, each response payload matches the request payload. For work mode, each request payload
+is a 4-byte iteration count plus the seed bytes, and each response payload is an 8-byte digest. The
+reported MiB/sec value is based on the actual encoded request and response frame sizes for the chosen
+mode.
+
+Work-mode smoke example:
+
+```bash
+./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2 --message-type work --work-iterations 1000
+```
 
 ## Baseline Run
 
@@ -35,7 +50,7 @@ cmake --build --preset release
 Command:
 
 ```bash
-./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2
+./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2 --message-type echo
 ```
 
 Result:
@@ -43,6 +58,7 @@ Result:
 ```text
 clients=4
 workers=2
+message_type=echo
 requests_per_client=1000
 payload_bytes=64
 total_requests=4000

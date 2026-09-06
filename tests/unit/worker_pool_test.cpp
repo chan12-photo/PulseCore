@@ -13,9 +13,9 @@ namespace {
 
 using namespace std::chrono_literals;
 
-protocol::Message WorkRequest(std::uint64_t request_id) {
+protocol::Message EchoRequest(std::uint64_t request_id) {
   return protocol::Message{
-      .type = protocol::MessageType::kWorkRequest,
+      .type = protocol::MessageType::kEchoRequest,
       .request_id = request_id,
       .payload = {static_cast<protocol::Byte>(request_id)},
   };
@@ -41,7 +41,7 @@ TEST(WorkerPoolTest, ProcessesSubmittedWorkAndInvokesCompletionCallback) {
   EXPECT_TRUE(pool.TrySubmit(WorkItem{
       .connection_id = ConnectionId{7},
       .sequence = 3,
-      .request = WorkRequest(42),
+      .request = EchoRequest(42),
   }));
 
   std::unique_lock lock(mutex);
@@ -50,7 +50,7 @@ TEST(WorkerPoolTest, ProcessesSubmittedWorkAndInvokesCompletionCallback) {
 
   EXPECT_EQ(results[0].connection_id.value, 7U);
   EXPECT_EQ(results[0].sequence, 3U);
-  EXPECT_EQ(results[0].response.type, protocol::MessageType::kWorkResponse);
+  EXPECT_EQ(results[0].response.type, protocol::MessageType::kEchoResponse);
   EXPECT_EQ(results[0].response.request_id, 42U);
   EXPECT_EQ(results[0].response.payload, (std::vector<protocol::Byte>{42}));
 }
@@ -64,7 +64,7 @@ TEST(WorkerPoolTest, RejectsSubmissionsAfterStop) {
   EXPECT_FALSE(pool.TrySubmit(WorkItem{
       .connection_id = ConnectionId{1},
       .sequence = 0,
-      .request = WorkRequest(1),
+      .request = EchoRequest(1),
   }));
 }
 

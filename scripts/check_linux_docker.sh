@@ -28,5 +28,13 @@ docker run --rm \
       --clients 2 \
       --requests-per-client 10 \
       --payload-size 16 \
-      --workers 2
+      --workers 2 \
+      --message-type echo
+    /tmp/pulsecore-release/pulsecore_epoll_benchmark \
+      --clients 2 \
+      --requests-per-client 10 \
+      --payload-size 16 \
+      --workers 2 \
+      --message-type work \
+      --work-iterations 100
   '

@@ -69,7 +69,8 @@ ctest --test-dir build/linux-release --output-on-failure
 Benchmark smoke:
 
 ```bash
-./build/linux-release/pulsecore_epoll_benchmark --clients 2 --requests-per-client 10 --payload-size 16 --workers 2
+./build/linux-release/pulsecore_epoll_benchmark --clients 2 --requests-per-client 10 --payload-size 16 --workers 2 --message-type echo
+./build/linux-release/pulsecore_epoll_benchmark --clients 2 --requests-per-client 10 --payload-size 16 --workers 2 --message-type work --work-iterations 100
 ```
 
 ## Current Evidence
@@ -78,11 +79,12 @@ Last local verification date: 2026-09-06.
 
 | Environment | Command | Result |
 | --- | --- | --- |
-| macOS dev | `ctest --preset dev --output-on-failure` | 56/56 passed |
-| macOS release | `ctest --preset release --output-on-failure` | 56/56 passed |
-| macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 56/56 passed |
-| macOS TSan | `ctest --preset tsan --output-on-failure` | 56/56 passed |
-| Ubuntu 24.04 Docker release | `ctest --test-dir /tmp/pulsecore-inflight --output-on-failure` | 66/66 passed |
+| macOS dev | `ctest --preset dev --output-on-failure` | 60/60 passed |
+| macOS release | `ctest --preset release --output-on-failure` | 60/60 passed |
+| macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 60/60 passed |
+| macOS TSan | `ctest --preset tsan --output-on-failure` | 60/60 passed |
+| macOS profile | `ctest --preset profile --output-on-failure` | 60/60 passed |
+| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 71/71 passed; echo/work benchmark smoke passed |
 
 The macOS runs exclude Linux-only epoll tests because `epoll`, `eventfd`, and `signalfd` are Linux
 APIs. The Linux Docker run includes the epoll server tests.
@@ -94,7 +96,7 @@ GitHub Actions runs:
 - GCC development build and tests
 - Clang development build and tests
 - GCC release build and tests
-- GCC release benchmark smoke
+- GCC release echo and work benchmark smoke
 - Clang ASan/UBSan build and tests
 - Clang TSan build and tests
 
@@ -112,15 +114,18 @@ Unit tests cover:
 - output buffer high-water rejection
 - bounded queue close and saturation behavior
 - worker pool completion and shutdown behavior
+- deterministic work request encoding, digest generation, and invalid payload rejection
 - opaque connection registry behavior
 
 Integration tests cover:
 
 - blocking TCP echo request/response
+- blocking TCP work request/response
 - malformed input over TCP
 - client disconnect handling
 - multiple frames over one connection
 - multiple clients over the epoll reactor
+- work request/response over the epoll reactor
 - small per-event I/O budgets
 - per-connection response ordering when workers complete out of order
 - per-connection in-flight saturation

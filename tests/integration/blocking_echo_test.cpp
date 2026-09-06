@@ -1,11 +1,14 @@
 #include "pulsecore/network/blocking_tcp.hpp"
 
+#include "pulsecore/core/handler.hpp"
+
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <span>
 #include <thread>
@@ -22,6 +25,16 @@ protocol::Message EchoRequest(std::uint64_t request_id, std::vector<protocol::By
       .type = protocol::MessageType::kEchoRequest,
       .request_id = request_id,
       .payload = std::move(payload),
+  };
+}
+
+protocol::Message WorkRequest(std::uint64_t request_id,
+                              std::uint32_t iterations,
+                              const std::vector<protocol::Byte>& seed) {
+  return protocol::Message{
+      .type = protocol::MessageType::kWorkRequest,
+      .request_id = request_id,
+      .payload = core::EncodeWorkRequestPayload(iterations, seed),
   };
 }
 
@@ -90,6 +103,23 @@ TEST(BlockingEchoIntegrationTest, EchoesSingleRequestOverTcp) {
   EXPECT_EQ(response.type, protocol::MessageType::kEchoResponse);
   EXPECT_EQ(response.request_id, 42U);
   EXPECT_EQ(response.payload, (std::vector<protocol::Byte>{0x41, 0x42, 0x43}));
+}
+
+TEST(BlockingEchoIntegrationTest, HandlesWorkRequestOverTcp) {
+  BlockingEchoServer server(0);
+
+  ServerThread server_thread(server);
+  const std::vector<protocol::Byte> seed{0xAA, 0xBB};
+
+  const auto response =
+      SendRequestAndReadResponse("127.0.0.1", server.port(), WorkRequest(99, 3, seed));
+
+  server_thread.JoinAndRethrow();
+
+  EXPECT_EQ(response.type, protocol::MessageType::kWorkResponse);
+  EXPECT_EQ(response.request_id, 99U);
+  EXPECT_EQ(response.payload,
+            (std::vector<protocol::Byte>{0xA2, 0x89, 0x7E, 0x00, 0x44, 0x62, 0x2F, 0x90}));
 }
 
 TEST(BlockingEchoIntegrationTest, HandlesMultipleFramesOnOneConnection) {

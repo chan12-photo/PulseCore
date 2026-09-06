@@ -34,7 +34,22 @@ The initial protocol version is `1`.
 
 The initial maximum payload size is 64 KiB.
 
-Payload bytes are interpreted by the message handler. The frame decoder only validates the envelope and restores complete frames from arbitrary TCP byte chunks.
+Payload bytes are interpreted by the message handler. The frame decoder only validates the envelope
+and restores complete frames from arbitrary TCP byte chunks.
+
+Echo requests carry arbitrary payload bytes. Echo responses return the same payload bytes.
+
+Work requests carry a deterministic synthetic CPU workload:
+
+| Offset | Size | Field | Encoding |
+|---:|---:|---|---|
+| 0 | 4 | iterations | unsigned 32-bit integer |
+| 4 | remaining payload | seed bytes | opaque bytes |
+
+The iteration field is big-endian, like the frame header. The handler rejects work requests that are
+shorter than 4 bytes or that request more than 1,000,000 iterations. Accepted work requests return a
+work response containing an 8-byte big-endian deterministic digest. The digest is intended as a
+repeatable worker-path workload, not as a cryptographic hash.
 
 ## Request IDs
 
@@ -51,3 +66,6 @@ Malformed conditions include:
 - unknown message type
 - payload length above the configured maximum
 - frame size overflow
+
+Semantically invalid work request payloads are valid frames, so they receive an error response
+instead of being treated as decoder errors.

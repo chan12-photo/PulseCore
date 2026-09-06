@@ -18,16 +18,52 @@ TEST(HandlerTest, EchoRequestReturnsEchoResponseWithSameRequestIdAndPayload) {
   EXPECT_EQ(response.payload, (std::vector<protocol::Byte>{0x01, 0x02, 0x03}));
 }
 
-TEST(HandlerTest, WorkRequestReturnsWorkResponseWithSameRequestIdAndPayload) {
+TEST(HandlerTest, EncodeWorkRequestPayloadPrefixesBigEndianIterationCount) {
+  const std::vector<protocol::Byte> seed{0xAA, 0xBB};
+
+  const auto payload = EncodeWorkRequestPayload(0x01020304U, seed);
+
+  EXPECT_EQ(payload, (std::vector<protocol::Byte>{0x01, 0x02, 0x03, 0x04, 0xAA, 0xBB}));
+}
+
+TEST(HandlerTest, WorkRequestReturnsDeterministicDigest) {
+  const std::vector<protocol::Byte> seed{0xAA, 0xBB};
+
   const auto response = HandleRequest(protocol::Message{
       .type = protocol::MessageType::kWorkRequest,
       .request_id = 99,
-      .payload = {0xAA},
+      .payload = EncodeWorkRequestPayload(3, seed),
   });
 
   EXPECT_EQ(response.type, protocol::MessageType::kWorkResponse);
   EXPECT_EQ(response.request_id, 99U);
-  EXPECT_EQ(response.payload, (std::vector<protocol::Byte>{0xAA}));
+  EXPECT_EQ(response.payload,
+            (std::vector<protocol::Byte>{0xA2, 0x89, 0x7E, 0x00, 0x44, 0x62, 0x2F, 0x90}));
+}
+
+TEST(HandlerTest, WorkRequestRejectsMissingIterationPrefix) {
+  const auto response = HandleRequest(protocol::Message{
+      .type = protocol::MessageType::kWorkRequest,
+      .request_id = 100,
+      .payload = {0xAA},
+  });
+
+  EXPECT_EQ(response.type, protocol::MessageType::kErrorResponse);
+  EXPECT_EQ(response.request_id, 100U);
+  EXPECT_FALSE(response.payload.empty());
+}
+
+TEST(HandlerTest, WorkRequestRejectsExcessiveIterations) {
+  const auto response = HandleRequest(protocol::Message{
+      .type = protocol::MessageType::kWorkRequest,
+      .request_id = 101,
+      .payload = EncodeWorkRequestPayload(kMaxWorkIterations + 1U,
+                                           std::vector<protocol::Byte>{}),
+  });
+
+  EXPECT_EQ(response.type, protocol::MessageType::kErrorResponse);
+  EXPECT_EQ(response.request_id, 101U);
+  EXPECT_FALSE(response.payload.empty());
 }
 
 TEST(HandlerTest, OwnedEchoRequestReturnsEchoResponseWithSameRequestIdAndPayload) {

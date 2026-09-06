@@ -4,8 +4,8 @@ PulseCore is a C++20/Linux event-processing engine portfolio project.
 
 The Core goal is to build a TCP server engine with explicit binary framing, non-blocking I/O, an epoll reactor, bounded queues, worker threads, graceful shutdown, tests, sanitizers, benchmarks, perf profiling, and one evidence-based optimization.
 
-This repository is currently at the Linux epoll reactor, benchmark, perf profiling, and first
-measured optimization step.
+This repository is currently at the Linux epoll reactor, deterministic work handler, benchmark, perf
+profiling, and first measured optimization step.
 
 ## Current Scope
 
@@ -23,12 +23,14 @@ Implemented:
 - opaque monotonic connection registry
 - bounded work queue
 - worker pool
+- deterministic bounded `WORK` request handler
 - Linux epoll server with `eventfd` worker response wake-up
 - Linux `signalfd` shutdown path for SIGINT/SIGTERM in the epoll server app
 - per-connection response ordering for asynchronous worker results
 - per-connection in-flight request limit
 - per-event read/write byte budgets for reactor fairness
 - Linux epoll loopback benchmark executable
+- echo and deterministic work benchmark modes
 - Linux perf profiling notes for the benchmark
 - evidence-based hot-path copy reduction optimization
 - Linux epoll integration tests
@@ -42,6 +44,7 @@ Implemented:
 - reactor fairness budget ADR
 - hot-path copy reduction ADR
 - per-connection in-flight limit ADR
+- deterministic work request ADR
 
 Future native-Linux follow-up:
 
@@ -94,7 +97,7 @@ The benchmark reports throughput and round-trip latency percentiles.
 ```bash
 cmake --preset release
 cmake --build --preset release
-./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2
+./build/release/pulsecore_epoll_benchmark --clients 4 --requests-per-client 1000 --payload-size 64 --workers 2 --message-type echo
 ```
 
 ## Profiling

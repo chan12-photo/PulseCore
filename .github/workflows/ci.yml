@@ -54,4 +54,6 @@ jobs:
 
       - name: Benchmark smoke
         if: matrix.preset == 'release'
-        run: ./build/release/pulsecore_epoll_benchmark --clients 2 --requests-per-client 10 --payload-size 16 --workers 2
+        run: |
+          ./build/release/pulsecore_epoll_benchmark --clients 2 --requests-per-client 10 --payload-size 16 --workers 2 --message-type echo
+          ./build/release/pulsecore_epoll_benchmark --clients 2 --requests-per-client 10 --payload-size 16 --workers 2 --message-type work --work-iterations 100

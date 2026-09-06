@@ -34,6 +34,11 @@ EpollEchoServer reactor
 The blocking TCP server and client remain as a simple reference path. They share the same protocol
 codec and request handler, but they do not use epoll or the worker pool.
 
+The request handler supports two request families: echo requests, which return the payload unchanged,
+and work requests, which run a deterministic bounded CPU workload and return an 8-byte digest. The
+work path gives the worker pool and backpressure tests a repeatable non-trivial workload without
+making external service calls or relying on timing-sensitive behavior.
+
 ## Request Lifecycle
 
 1. The listener accepts a client with `accept4(..., SOCK_NONBLOCK | SOCK_CLOEXEC)`.
@@ -75,7 +80,8 @@ The policy favors clear resource bounds and simple failure behavior over partial
 ## Performance Path
 
 The benchmark drives the same epoll server over TCP loopback with multiple synchronous clients. It
-reports throughput, MiB/sec, and round-trip latency percentiles.
+can exercise either echo requests or deterministic work requests, then reports throughput, MiB/sec,
+and round-trip latency percentiles.
 
 The first measured optimization reduced redundant application-level copies across existing ownership
 boundaries. The benchmark recorded median improvements of 31.49% for a 16 KiB payload run and 15.41%
