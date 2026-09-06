@@ -90,6 +90,11 @@ cmake --build --preset release
 See `docs/profiling.md` for the Linux `perf stat` and `perf record` evidence gathered against the
 epoll loopback benchmark.
 
+```bash
+cmake --preset profile
+cmake --build --preset profile --target pulsecore_epoll_benchmark
+```
+
 ## Documentation
 
 - `docs/architecture.md`: component map, request lifecycle, invariants, and backpressure policy

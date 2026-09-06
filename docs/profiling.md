@@ -15,8 +15,8 @@ commands on a native Linux host for hardware-counter evidence.
 ## Build
 
 ```bash
-cmake -S . -B build/profile -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPULSECORE_BUILD_TESTS=ON
-cmake --build build/profile --target pulsecore_epoll_benchmark
+cmake --preset profile
+cmake --build --preset profile --target pulsecore_epoll_benchmark
 ```
 
 ## perf stat

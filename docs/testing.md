@@ -38,6 +38,14 @@ cmake --build --preset tsan
 ctest --preset tsan --output-on-failure
 ```
 
+Profiling build:
+
+```bash
+cmake --preset profile
+cmake --build --preset profile
+ctest --preset profile --output-on-failure
+```
+
 Linux-only full test run:
 
 ```bash
