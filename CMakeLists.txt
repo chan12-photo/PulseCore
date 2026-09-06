@@ -218,9 +218,19 @@ if(PULSECORE_BUILD_TESTS)
       COMMAND pulsecore_epoll_server --unknown-option
     )
     add_test(NAME EpollServerCliRejectsZeroWorkers COMMAND pulsecore_epoll_server --workers 0)
+    add_test(
+      NAME EpollServerCliRejectsNegativeWorkers
+      COMMAND pulsecore_epoll_server --workers -1
+    )
+    add_test(
+      NAME EpollBenchmarkCliRejectsNegativeWorkers
+      COMMAND pulsecore_epoll_benchmark --workers -1
+    )
     set_tests_properties(
       EpollServerCliRejectsUnknownOption
       EpollServerCliRejectsZeroWorkers
+      EpollServerCliRejectsNegativeWorkers
+      EpollBenchmarkCliRejectsNegativeWorkers
       PROPERTIES WILL_FAIL TRUE
     )
   endif()

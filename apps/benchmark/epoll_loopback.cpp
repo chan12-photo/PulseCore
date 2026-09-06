@@ -84,12 +84,22 @@ class ServerThread {
 
 std::size_t ParsePositiveSize(std::string_view option, const char* text) {
   std::size_t parsed_chars = 0;
-  const auto value = std::stoull(std::string(text), &parsed_chars);
-  if (parsed_chars != std::string_view(text).size() || value == 0 ||
-      value > std::numeric_limits<std::size_t>::max()) {
+  const std::string input(text);
+  if (input.empty() || input.front() == '-') {
     throw std::runtime_error(std::string(option) + " must be a positive integer");
   }
-  return static_cast<std::size_t>(value);
+  try {
+    const auto value = std::stoull(input, &parsed_chars);
+    if (parsed_chars != input.size() || value == 0 ||
+        value > std::numeric_limits<std::size_t>::max()) {
+      throw std::runtime_error(std::string(option) + " must be a positive integer");
+    }
+    return static_cast<std::size_t>(value);
+  } catch (const std::invalid_argument&) {
+    throw std::runtime_error(std::string(option) + " must be a positive integer");
+  } catch (const std::out_of_range&) {
+    throw std::runtime_error(std::string(option) + " is out of range");
+  }
 }
 
 BenchmarkMessageType ParseMessageType(std::string_view option, const char* text) {

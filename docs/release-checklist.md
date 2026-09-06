@@ -36,7 +36,7 @@ Expected current result:
 
 Expected current result:
 
-- Ubuntu 24.04 Docker release: 77/77 tests passed
+- Ubuntu 24.04 Docker release: 79/79 tests passed
 - Echo benchmark smoke passed
 - Work benchmark smoke passed
 
