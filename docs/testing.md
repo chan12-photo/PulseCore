@@ -79,12 +79,12 @@ Last local verification date: 2026-09-06.
 
 | Environment | Command | Result |
 | --- | --- | --- |
-| macOS dev | `ctest --preset dev --output-on-failure` | 60/60 passed |
-| macOS release | `ctest --preset release --output-on-failure` | 60/60 passed |
-| macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 60/60 passed |
-| macOS TSan | `ctest --preset tsan --output-on-failure` | 60/60 passed |
-| macOS profile | `ctest --preset profile --output-on-failure` | 60/60 passed |
-| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 79/79 passed; echo/work benchmark smoke passed |
+| macOS dev | `ctest --preset dev --output-on-failure` | 66/66 passed |
+| macOS release | `ctest --preset release --output-on-failure` | 66/66 passed |
+| macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 66/66 passed |
+| macOS TSan | `ctest --preset tsan --output-on-failure` | 66/66 passed |
+| macOS profile | `ctest --preset profile --output-on-failure` | 66/66 passed |
+| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 85/85 passed; echo/work benchmark smoke passed |
 
 The macOS runs exclude Linux-only epoll tests because `epoll`, `eventfd`, and `signalfd` are Linux
 APIs. The Linux Docker run includes the epoll server tests.
@@ -121,6 +121,7 @@ Integration tests cover:
 
 - blocking TCP echo request/response
 - blocking TCP work request/response
+- blocking server and client CLI help and invalid option validation
 - malformed input over TCP
 - client disconnect handling
 - multiple frames over one connection

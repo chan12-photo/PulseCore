@@ -190,6 +190,26 @@ if(PULSECORE_BUILD_TESTS)
 
   gtest_discover_tests(pulsecore_integration_tests)
 
+  add_test(NAME BlockingServerCliHelp COMMAND pulsecore_server --help)
+  add_test(NAME BlockingServerCliRejectsBadPort COMMAND pulsecore_server not-a-port)
+  add_test(NAME ClientCliHelp COMMAND pulsecore_client --help)
+  add_test(NAME ClientCliRejectsMissingPort COMMAND pulsecore_client)
+  add_test(
+    NAME ClientCliRejectsBadMessageType
+    COMMAND pulsecore_client 9000 --message-type nope
+  )
+  add_test(
+    NAME ClientCliRejectsNegativeWorkIterations
+    COMMAND pulsecore_client 9000 --message-type work --work-iterations -1
+  )
+  set_tests_properties(
+    BlockingServerCliRejectsBadPort
+    ClientCliRejectsMissingPort
+    ClientCliRejectsBadMessageType
+    ClientCliRejectsNegativeWorkIterations
+    PROPERTIES WILL_FAIL TRUE
+  )
+
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_executable(pulsecore_epoll_integration_tests
       tests/integration/epoll_echo_test.cpp
@@ -217,7 +237,10 @@ if(PULSECORE_BUILD_TESTS)
       NAME EpollServerCliRejectsUnknownOption
       COMMAND pulsecore_epoll_server --unknown-option
     )
-    add_test(NAME EpollServerCliRejectsZeroWorkers COMMAND pulsecore_epoll_server --workers 0)
+    add_test(
+      NAME EpollServerCliRejectsZeroWorkers
+      COMMAND pulsecore_epoll_server --workers 0
+    )
     add_test(
       NAME EpollServerCliRejectsNegativeWorkers
       COMMAND pulsecore_epoll_server --workers -1
