@@ -57,7 +57,7 @@ use the same resource policy knobs as the integration tests.
 
 ## Current Limitations
 
-This is not the final C2 architecture yet.
+This is not a multi-reactor production server.
 
 - shutdown closes live connections instead of draining every pending response
 - fairness is byte-budget based, not priority or latency scheduled

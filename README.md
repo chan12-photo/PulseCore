@@ -1,5 +1,7 @@
 # PulseCore
 
+[![ci](https://github.com/chan12-photo/PulseCore/actions/workflows/ci.yml/badge.svg)](https://github.com/chan12-photo/PulseCore/actions/workflows/ci.yml)
+
 PulseCore is a C++20/Linux event-processing engine portfolio project.
 
 The Core goal is to build a TCP server engine with explicit binary framing, non-blocking I/O, an epoll reactor, bounded queues, worker threads, graceful shutdown, tests, sanitizers, benchmarks, perf profiling, and one evidence-based optimization.
@@ -37,7 +39,7 @@ Implemented:
 - Linux perf profiling notes for the benchmark
 - evidence-based hot-path copy reduction optimization
 - Linux epoll integration tests
-- shared request handler for blocking and future reactor paths
+- shared request handler for blocking and epoll reactor paths
 - initial project scope ADR
 - binary protocol framing ADR
 - non-blocking connection model ADR
@@ -54,6 +56,14 @@ Implemented:
 Future native-Linux follow-up:
 
 - hardware-counter profiling on a non-virtualized Linux host
+
+## Requirements
+
+- CMake 3.20+
+- C++20 compiler
+- Ninja
+- Linux for the epoll server, epoll benchmark, and Linux-only integration tests
+- Docker for reproducing Linux checks from macOS
 
 ## Build
 
@@ -155,7 +165,7 @@ cmake --build --preset tsan
 ctest --preset tsan
 ```
 
-## Non-goals Before C3
+## Out Of Scope For This Milestone
 
 - Trading simulator
 - EdgeVision runtime
