@@ -130,6 +130,7 @@ cmake --build --preset profile --target pulsecore_epoll_benchmark
 - `docs/testing.md`: local verification commands, CI matrix, and covered behaviors
 - `docs/benchmark.md`: benchmark methodology, baseline, and before/after optimization data
 - `docs/profiling.md`: Linux `perf stat` and `perf record` notes
+- `docs/release-checklist.md`: final verification and publishing checklist
 - `docs/adr/`: short architecture decision records
 
 ## Release Build
