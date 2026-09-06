@@ -114,6 +114,7 @@ cmake --build --preset profile --target pulsecore_epoll_benchmark
 
 ## Documentation
 
+- `docs/case-study.md`: portfolio narrative, evidence summary, and trade-offs
 - `docs/architecture.md`: component map, request lifecycle, invariants, and backpressure policy
 - `docs/protocol.md`: binary frame format and protocol rules
 - `docs/testing.md`: local verification commands, CI matrix, and covered behaviors
