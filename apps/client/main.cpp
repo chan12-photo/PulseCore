@@ -30,27 +30,47 @@ struct ClientConfig {
 std::uint16_t ParsePort(const char* text) {
   std::size_t parsed_chars = 0;
   const std::string input(text);
-  const auto value = std::stoul(input, &parsed_chars);
-  if (parsed_chars != input.size()) {
+  if (input.empty() || input.front() == '-') {
     throw std::runtime_error("port must be an integer");
   }
-  if (value > std::numeric_limits<std::uint16_t>::max()) {
+
+  try {
+    const auto value = std::stoul(input, &parsed_chars);
+    if (parsed_chars != input.size()) {
+      throw std::runtime_error("port must be an integer");
+    }
+    if (value > std::numeric_limits<std::uint16_t>::max()) {
+      throw std::runtime_error("port is out of range");
+    }
+    return static_cast<std::uint16_t>(value);
+  } catch (const std::invalid_argument&) {
+    throw std::runtime_error("port must be an integer");
+  } catch (const std::out_of_range&) {
     throw std::runtime_error("port is out of range");
   }
-  return static_cast<std::uint16_t>(value);
 }
 
 std::uint32_t ParseWorkIterations(std::string_view option, const char* text) {
   std::size_t parsed_chars = 0;
   const std::string input(text);
-  const auto value = std::stoul(input, &parsed_chars);
-  if (parsed_chars != input.size() || value == 0) {
+  if (input.empty() || input.front() == '-') {
     throw std::runtime_error(std::string(option) + " must be a positive integer");
   }
-  if (value > pulsecore::core::kMaxWorkIterations) {
+
+  try {
+    const auto value = std::stoul(input, &parsed_chars);
+    if (parsed_chars != input.size() || value == 0) {
+      throw std::runtime_error(std::string(option) + " must be a positive integer");
+    }
+    if (value > pulsecore::core::kMaxWorkIterations) {
+      throw std::runtime_error(std::string(option) + " exceeds maximum work iterations");
+    }
+    return static_cast<std::uint32_t>(value);
+  } catch (const std::invalid_argument&) {
+    throw std::runtime_error(std::string(option) + " must be a positive integer");
+  } catch (const std::out_of_range&) {
     throw std::runtime_error(std::string(option) + " exceeds maximum work iterations");
   }
-  return static_cast<std::uint32_t>(value);
 }
 
 ClientMessageType ParseMessageType(std::string_view option, const char* text) {

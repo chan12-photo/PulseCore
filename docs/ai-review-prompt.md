@@ -30,8 +30,8 @@ Current implementation summary:
 - ADRs, testing docs, benchmark docs, case study, and release checklist.
 
 Current verification evidence:
-- macOS local presets pass 66/66 tests for dev, release, ASan/UBSan, TSan, and profile.
-- Ubuntu 24.04 Docker release check passes 86/86 tests, including Linux-only epoll tests and benchmark smoke.
+- macOS local presets pass 69/69 tests for dev, release, ASan/UBSan, TSan, and profile.
+- Ubuntu 24.04 Docker release check passes 90/90 tests, including Linux-only epoll tests and benchmark smoke.
 - GitHub Actions CI passes GCC dev, GCC release, Clang dev, Clang ASan/UBSan, and Clang TSan jobs.
 
 Please review these files first:
@@ -83,15 +83,14 @@ then continue with small, verifiable portfolio-readiness improvements. Do not re
 Latest known state:
 - main branch is pushed to GitHub.
 - CI is green.
-- macOS local checks pass 66/66 across dev/release/ASan-UBSan/TSan/profile.
-- Ubuntu 24.04 Docker release check passes 86/86 plus echo/work benchmark smoke.
-- Recent commits added CLI validation coverage, updated GitHub Actions checkout, polished docs, and added
-  an epoll stale-worker-result integration test.
+- macOS local checks pass 69/69 across dev/release/ASan-UBSan/TSan/profile.
+- Ubuntu 24.04 Docker release check passes 90/90 plus echo/work benchmark smoke.
+- Recent commits added CLI validation coverage, updated GitHub Actions checkout, polished docs, added
+  an epoll stale-worker-result integration test, and tightened numeric CLI parsing.
 
 Good next tasks:
-1. Review CLI numeric parsing in apps/client/main.cpp, apps/server/main.cpp, and apps/epoll_server/main.cpp
-   for consistent negative/out-of-range rejection and tests.
-2. Do a final README/docs pass for portfolio clarity and claim accuracy.
+1. Do a final README/docs pass for portfolio clarity and claim accuracy.
+2. Review whether any small race/resource-lifetime tests are still missing around epoll shutdown and overload.
 3. Run ./scripts/check_local.sh and ./scripts/check_linux_docker.sh after code changes.
 4. Commit each coherent change with a short conventional commit message and push.
 

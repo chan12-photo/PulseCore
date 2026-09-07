@@ -75,16 +75,16 @@ Benchmark smoke:
 
 ## Current Evidence
 
-Last local verification date: 2026-09-06.
+Last local verification date: 2026-09-07.
 
 | Environment | Command | Result |
 | --- | --- | --- |
-| macOS dev | `ctest --preset dev --output-on-failure` | 66/66 passed |
-| macOS release | `ctest --preset release --output-on-failure` | 66/66 passed |
-| macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 66/66 passed |
-| macOS TSan | `ctest --preset tsan --output-on-failure` | 66/66 passed |
-| macOS profile | `ctest --preset profile --output-on-failure` | 66/66 passed |
-| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 86/86 passed; echo/work benchmark smoke passed |
+| macOS dev | `ctest --preset dev --output-on-failure` | 69/69 passed |
+| macOS release | `ctest --preset release --output-on-failure` | 69/69 passed |
+| macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 69/69 passed |
+| macOS TSan | `ctest --preset tsan --output-on-failure` | 69/69 passed |
+| macOS profile | `ctest --preset profile --output-on-failure` | 69/69 passed |
+| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 90/90 passed; echo/work benchmark smoke passed |
 
 The macOS runs exclude Linux-only epoll tests because `epoll`, `eventfd`, and `signalfd` are Linux
 APIs. The Linux Docker run includes the epoll server tests.

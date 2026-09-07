@@ -192,11 +192,17 @@ if(PULSECORE_BUILD_TESTS)
 
   add_test(NAME BlockingServerCliHelp COMMAND pulsecore_server --help)
   add_test(NAME BlockingServerCliRejectsBadPort COMMAND pulsecore_server not-a-port)
+  add_test(NAME BlockingServerCliRejectsNegativePort COMMAND pulsecore_server -1)
   add_test(NAME ClientCliHelp COMMAND pulsecore_client --help)
   add_test(NAME ClientCliRejectsMissingPort COMMAND pulsecore_client)
+  add_test(NAME ClientCliRejectsNegativePort COMMAND pulsecore_client -1)
   add_test(
     NAME ClientCliRejectsBadMessageType
     COMMAND pulsecore_client 9000 --message-type nope
+  )
+  add_test(
+    NAME ClientCliRejectsBadWorkIterations
+    COMMAND pulsecore_client 9000 --message-type work --work-iterations nope
   )
   add_test(
     NAME ClientCliRejectsNegativeWorkIterations
@@ -204,8 +210,11 @@ if(PULSECORE_BUILD_TESTS)
   )
   set_tests_properties(
     BlockingServerCliRejectsBadPort
+    BlockingServerCliRejectsNegativePort
     ClientCliRejectsMissingPort
+    ClientCliRejectsNegativePort
     ClientCliRejectsBadMessageType
+    ClientCliRejectsBadWorkIterations
     ClientCliRejectsNegativeWorkIterations
     PROPERTIES WILL_FAIL TRUE
   )
@@ -238,6 +247,10 @@ if(PULSECORE_BUILD_TESTS)
       COMMAND pulsecore_epoll_server --unknown-option
     )
     add_test(
+      NAME EpollServerCliRejectsBadPort
+      COMMAND pulsecore_epoll_server 999999
+    )
+    add_test(
       NAME EpollServerCliRejectsZeroWorkers
       COMMAND pulsecore_epoll_server --workers 0
     )
@@ -251,6 +264,7 @@ if(PULSECORE_BUILD_TESTS)
     )
     set_tests_properties(
       EpollServerCliRejectsUnknownOption
+      EpollServerCliRejectsBadPort
       EpollServerCliRejectsZeroWorkers
       EpollServerCliRejectsNegativeWorkers
       EpollBenchmarkCliRejectsNegativeWorkers
