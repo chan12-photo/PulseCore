@@ -68,6 +68,7 @@ class Connection {
   [[nodiscard]] int fd() const noexcept;
   [[nodiscard]] bool has_pending_output() const noexcept;
   [[nodiscard]] std::size_t pending_output_bytes() const noexcept;
+  [[nodiscard]] std::size_t output_storage_bytes() const noexcept;
   [[nodiscard]] std::size_t buffered_input_bytes() const noexcept;
 
   [[nodiscard]] ReadAvailableResult ReadAvailable(
@@ -78,6 +79,7 @@ class Connection {
 
  private:
   std::optional<protocol::ProtocolError> DrainDecoder(std::vector<protocol::Message>& messages);
+  void CompactOutputBuffer();
 
   ConnectionId id_;
   UniqueFd fd_;

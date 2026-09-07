@@ -88,15 +88,6 @@ ShutdownSignalMaskState BlockShutdownSignals(const std::vector<int>& signals) {
   return state;
 }
 
-void RestoreSignalMask(ShutdownSignalMaskState& state) noexcept {
-  if (!state.active) {
-    return;
-  }
-
-  (void)::pthread_sigmask(SIG_SETMASK, &state.previous_mask, nullptr);
-  state.active = false;
-}
-
 sockaddr_in LoopbackAddress(std::uint16_t port) {
   sockaddr_in address{};
   address.sin_family = AF_INET;
@@ -226,6 +217,37 @@ UniqueFd AcceptNonBlocking(int listener_fd) {
 
 }  // namespace
 
+ShutdownSignalMaskState::~ShutdownSignalMaskState() {
+  Restore();
+}
+
+ShutdownSignalMaskState::ShutdownSignalMaskState(ShutdownSignalMaskState&& other) noexcept
+    : previous_mask(other.previous_mask), active(other.active) {
+  other.active = false;
+}
+
+ShutdownSignalMaskState& ShutdownSignalMaskState::operator=(
+    ShutdownSignalMaskState&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+
+  Restore();
+  previous_mask = other.previous_mask;
+  active = other.active;
+  other.active = false;
+  return *this;
+}
+
+void ShutdownSignalMaskState::Restore() noexcept {
+  if (!active) {
+    return;
+  }
+
+  (void)::pthread_sigmask(SIG_SETMASK, &previous_mask, nullptr);
+  active = false;
+}
+
 EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions options)
     : listener_(CreateListener(port)),
       epoll_(CreateEpoll()),
@@ -255,7 +277,7 @@ EpollEchoServer::EpollEchoServer(std::uint16_t port, EpollEchoServerOptions opti
 EpollEchoServer::~EpollEchoServer() {
   Stop();
   worker_pool_.Stop();
-  RestoreSignalMask(signal_mask_state_);
+  signal_mask_state_.Restore();
 }
 
 std::uint16_t EpollEchoServer::port() const noexcept {
@@ -383,7 +405,8 @@ void EpollEchoServer::HandleConnectionEvent(ConnectionId id, std::uint32_t event
     should_remove = true;
   }
 
-  if (!should_remove && (events & EPOLLIN) != 0U && !flow.close_after_flush) {
+  if (!should_remove && (events & (EPOLLIN | EPOLLRDHUP | EPOLLHUP)) != 0U &&
+      !flow.close_after_flush) {
     auto read = connection->ReadAvailable(max_read_bytes_per_event_);
     if (!SubmitWork(id, read.messages)) {
       should_remove = true;
@@ -401,10 +424,6 @@ void EpollEchoServer::HandleConnectionEvent(ConnectionId id, std::uint32_t event
     if (write.status == WriteAvailableStatus::kPeerClosed) {
       should_remove = true;
     }
-  }
-
-  if (!should_remove && (events & (EPOLLHUP | EPOLLRDHUP)) != 0U) {
-    flow.close_after_flush = true;
   }
 
   if (should_remove) {

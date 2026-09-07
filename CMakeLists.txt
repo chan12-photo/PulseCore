@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 
 project(
   PulseCore
@@ -239,7 +239,7 @@ if(PULSECORE_BUILD_TESTS)
       )
     endif()
 
-    gtest_discover_tests(pulsecore_epoll_integration_tests)
+    gtest_discover_tests(pulsecore_epoll_integration_tests PROPERTIES TIMEOUT 10)
 
     add_test(NAME EpollServerCliHelp COMMAND pulsecore_epoll_server --help)
     add_test(

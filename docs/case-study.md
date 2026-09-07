@@ -39,8 +39,8 @@ Two request types are implemented:
 
 Current verification date: 2026-09-07.
 
-- macOS local presets: dev, release, ASan/UBSan, TSan, and profile all pass 69/69 tests
-- Ubuntu 24.04 Docker release run passes 90/90 tests, including Linux-only epoll and CLI smoke tests
+- macOS local presets: dev, release, ASan/UBSan, TSan, and profile all pass 71/71 tests
+- Ubuntu 24.04 Docker release run passes 95/95 tests, including Linux-only epoll and CLI smoke tests
 - Docker smoke checks run both echo and deterministic work benchmark modes
 - `git diff --check` is part of the local check script
 

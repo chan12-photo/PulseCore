@@ -23,6 +23,17 @@ constexpr std::size_t kDefaultMaxInFlightRequestsPerConnection = 1024U;
 struct ShutdownSignalMaskState {
   sigset_t previous_mask{};
   bool active{false};
+
+  ShutdownSignalMaskState() = default;
+  ~ShutdownSignalMaskState();
+
+  ShutdownSignalMaskState(const ShutdownSignalMaskState&) = delete;
+  ShutdownSignalMaskState& operator=(const ShutdownSignalMaskState&) = delete;
+
+  ShutdownSignalMaskState(ShutdownSignalMaskState&& other) noexcept;
+  ShutdownSignalMaskState& operator=(ShutdownSignalMaskState&& other) noexcept;
+
+  void Restore() noexcept;
 };
 
 struct EpollEchoServerOptions {

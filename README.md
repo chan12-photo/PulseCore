@@ -59,7 +59,7 @@ Future native-Linux follow-up:
 
 ## Requirements
 
-- CMake 3.20+
+- CMake 3.21+
 - C++20 compiler
 - Ninja
 - Linux for the epoll server, epoll benchmark, and Linux-only integration tests

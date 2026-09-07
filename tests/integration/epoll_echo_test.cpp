@@ -4,6 +4,7 @@
 #include "pulsecore/network/blocking_tcp.hpp"
 
 #include <errno.h>
+#include <pthread.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -75,6 +76,48 @@ class EpollServerThread {
   EpollEchoServer& server_;
   std::thread thread_;
   std::exception_ptr error_;
+};
+
+class PromiseReleaseGuard {
+ public:
+  explicit PromiseReleaseGuard(std::shared_ptr<std::promise<void>> promise)
+      : promise_(std::move(promise)) {}
+
+  PromiseReleaseGuard(const PromiseReleaseGuard&) = delete;
+  PromiseReleaseGuard& operator=(const PromiseReleaseGuard&) = delete;
+
+  ~PromiseReleaseGuard() noexcept {
+    Release();
+  }
+
+  void Release() noexcept {
+    if (promise_ == nullptr) {
+      return;
+    }
+    try {
+      promise_->set_value();
+    } catch (...) {
+    }
+    promise_.reset();
+  }
+
+ private:
+  std::shared_ptr<std::promise<void>> promise_;
+};
+
+class SignalMaskRestorer {
+ public:
+  explicit SignalMaskRestorer(const sigset_t& mask) : mask_(mask) {}
+
+  SignalMaskRestorer(const SignalMaskRestorer&) = delete;
+  SignalMaskRestorer& operator=(const SignalMaskRestorer&) = delete;
+
+  ~SignalMaskRestorer() noexcept {
+    (void)::pthread_sigmask(SIG_SETMASK, &mask_, nullptr);
+  }
+
+ private:
+  sigset_t mask_{};
 };
 
 protocol::Message EchoRequest(std::uint64_t request_id, std::vector<protocol::Byte> payload) {
@@ -178,6 +221,59 @@ TEST(EpollEchoIntegrationTest, EchoesRequestWithSmallPerEventBudgets) {
   EXPECT_EQ(response.type, protocol::MessageType::kEchoResponse);
   EXPECT_EQ(response.request_id, 43U);
   EXPECT_EQ(response.payload, (std::vector<protocol::Byte>{0x41, 0x42, 0x43}));
+}
+
+TEST(EpollEchoIntegrationTest, DrainsHalfClosedRequestAcrossReadBudgets) {
+  EpollEchoServerOptions options;
+  options.max_read_bytes_per_event = 5;
+
+  EpollEchoServer server(0, std::move(options));
+
+  UniqueFd client = ConnectTcp("127.0.0.1", server.port());
+  SetReceiveTimeout(client.get());
+  SendMessage(client.get(), EchoRequest(9, {0x09}));
+  ASSERT_EQ(::shutdown(client.get(), SHUT_WR), 0);
+
+  EpollServerThread server_thread(server);
+
+  protocol::FrameDecoder decoder;
+  auto response = ReadMessage(client.get(), decoder);
+
+  client.reset();
+  server_thread.StopAndJoin();
+
+  ASSERT_EQ(response.status, ReadMessageStatus::kMessage);
+  ASSERT_TRUE(response.message.has_value());
+  EXPECT_EQ(response.message->type, protocol::MessageType::kEchoResponse);
+  EXPECT_EQ(response.message->request_id, 9U);
+  EXPECT_EQ(response.message->payload, (std::vector<protocol::Byte>{0x09}));
+}
+
+TEST(EpollEchoIntegrationTest, DrainsHalfClosedMaximumFrameWithDefaultReadBudget) {
+  EpollEchoServerOptions options;
+  options.max_read_bytes_per_event = kDefaultMaxReadBytesPerEvent;
+
+  EpollEchoServer server(0, std::move(options));
+
+  const std::vector<protocol::Byte> payload(protocol::kMaxPayloadSize, 0x5A);
+  UniqueFd client = ConnectTcp("127.0.0.1", server.port());
+  SetReceiveTimeout(client.get());
+  SendMessage(client.get(), EchoRequest(10, payload));
+  ASSERT_EQ(::shutdown(client.get(), SHUT_WR), 0);
+
+  EpollServerThread server_thread(server);
+
+  protocol::FrameDecoder decoder;
+  auto response = ReadMessage(client.get(), decoder);
+
+  client.reset();
+  server_thread.StopAndJoin();
+
+  ASSERT_EQ(response.status, ReadMessageStatus::kMessage);
+  ASSERT_TRUE(response.message.has_value());
+  EXPECT_EQ(response.message->type, protocol::MessageType::kEchoResponse);
+  EXPECT_EQ(response.message->request_id, 10U);
+  EXPECT_EQ(response.message->payload, payload);
 }
 
 TEST(EpollEchoIntegrationTest, RejectsZeroPerEventBudgets) {
@@ -383,6 +479,7 @@ TEST(EpollEchoIntegrationTest, PreservesResponseOrderWhenWorkersCompleteOutOfOrd
 TEST(EpollEchoIntegrationTest, DropsWorkerResultForConnectionRemovedBeforeCompletion) {
   auto first_started = std::make_shared<std::promise<void>>();
   auto release_first = std::make_shared<std::promise<void>>();
+  PromiseReleaseGuard release_first_guard(release_first);
   auto release_first_future = release_first->get_future().share();
   auto first_started_once = std::make_shared<std::atomic_bool>(false);
   auto first_started_future = first_started->get_future();
@@ -416,7 +513,7 @@ TEST(EpollEchoIntegrationTest, DropsWorkerResultForConnectionRemovedBeforeComple
 
   UniqueFd second_client = ConnectTcp("127.0.0.1", server.port());
   SendMessage(second_client.get(), EchoRequest(2, {0x02}));
-  release_first->set_value();
+  release_first_guard.Release();
 
   protocol::FrameDecoder decoder;
   auto response = ReadMessage(second_client.get(), decoder);
@@ -429,6 +526,29 @@ TEST(EpollEchoIntegrationTest, DropsWorkerResultForConnectionRemovedBeforeComple
   EXPECT_EQ(response.message->type, protocol::MessageType::kEchoResponse);
   EXPECT_EQ(response.message->request_id, 2U);
   EXPECT_EQ(response.message->payload, (std::vector<protocol::Byte>{0x02}));
+}
+
+TEST(EpollEchoIntegrationTest, RestoresSignalMaskWhenConstructionFails) {
+  sigset_t original{};
+  ASSERT_EQ(::pthread_sigmask(SIG_SETMASK, nullptr, &original), 0);
+  SignalMaskRestorer restore_original(original);
+
+  sigset_t signal_set{};
+  ASSERT_EQ(::sigemptyset(&signal_set), 0);
+  ASSERT_EQ(::sigaddset(&signal_set, SIGUSR1), 0);
+  ASSERT_EQ(::pthread_sigmask(SIG_UNBLOCK, &signal_set, nullptr), 0);
+
+  sigset_t before{};
+  ASSERT_EQ(::pthread_sigmask(SIG_SETMASK, nullptr, &before), 0);
+
+  EpollEchoServerOptions options;
+  options.shutdown_signals = {SIGUSR1};
+  options.max_connections = 0;
+  EXPECT_THROW(EpollEchoServer server(0, options), std::invalid_argument);
+
+  sigset_t after{};
+  ASSERT_EQ(::pthread_sigmask(SIG_SETMASK, nullptr, &after), 0);
+  EXPECT_EQ(::sigismember(&after, SIGUSR1), ::sigismember(&before, SIGUSR1));
 }
 
 TEST(EpollEchoIntegrationTest, ClosesConnectionWhenPerConnectionInFlightLimitIsExceeded) {

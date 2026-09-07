@@ -110,6 +110,10 @@ std::size_t Connection::pending_output_bytes() const noexcept {
   return output_buffer_.size() - output_offset_;
 }
 
+std::size_t Connection::output_storage_bytes() const noexcept {
+  return output_buffer_.size();
+}
+
 std::size_t Connection::buffered_input_bytes() const noexcept {
   return decoder_.BufferedSize();
 }
@@ -129,8 +133,14 @@ ReadAvailableResult Connection::ReadAvailable(std::size_t max_read_bytes) {
       return ReadAvailableResult::Ok(std::move(messages));
     }
 
+    if (decoder_.BufferedSize() >= limits_.max_input_buffer) {
+      return ReadAvailableResult::ProtocolError(protocol::ProtocolError::kPayloadTooLarge,
+                                                std::move(messages));
+    }
+
     const auto read_budget = max_read_bytes - total_read;
-    const auto bytes_to_read = std::min(bytes.size(), read_budget);
+    const auto input_space = limits_.max_input_buffer - decoder_.BufferedSize();
+    const auto bytes_to_read = std::min({bytes.size(), read_budget, input_space});
     const auto received = ::recv(fd_.get(), bytes.data(), bytes_to_read, 0);
     if (received < 0) {
       const int saved_errno = errno;
@@ -157,11 +167,6 @@ ReadAvailableResult Connection::ReadAvailable(std::size_t max_read_bytes) {
     total_read += static_cast<std::size_t>(received);
     decoder_.Append(std::span<const protocol::Byte>(bytes.data(),
                                                     static_cast<std::size_t>(received)));
-
-    if (decoder_.BufferedSize() > limits_.max_input_buffer) {
-      return ReadAvailableResult::ProtocolError(protocol::ProtocolError::kPayloadTooLarge,
-                                                std::move(messages));
-    }
   }
 }
 
@@ -170,6 +175,8 @@ bool Connection::QueueOutput(const protocol::Message& message) {
   if (!encoded.has_value()) {
     return false;
   }
+
+  CompactOutputBuffer();
 
   const auto pending = pending_output_bytes();
   if (pending > limits_.max_output_buffer) {
@@ -188,6 +195,22 @@ bool Connection::QueueOutput(const protocol::Message& message) {
 
   output_buffer_.insert(output_buffer_.end(), encoded->begin(), encoded->end());
   return true;
+}
+
+void Connection::CompactOutputBuffer() {
+  if (output_offset_ == 0) {
+    return;
+  }
+
+  if (output_offset_ >= output_buffer_.size()) {
+    output_buffer_.clear();
+    output_offset_ = 0;
+    return;
+  }
+
+  output_buffer_.erase(output_buffer_.begin(),
+                       output_buffer_.begin() + static_cast<std::ptrdiff_t>(output_offset_));
+  output_offset_ = 0;
 }
 
 WriteAvailableResult Connection::WriteAvailable(std::size_t max_write_bytes) {

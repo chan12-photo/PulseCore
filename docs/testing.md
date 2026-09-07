@@ -79,12 +79,12 @@ Last local verification date: 2026-09-07.
 
 | Environment | Command | Result |
 | --- | --- | --- |
-| macOS dev | `ctest --preset dev --output-on-failure` | 69/69 passed |
-| macOS release | `ctest --preset release --output-on-failure` | 69/69 passed |
-| macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 69/69 passed |
-| macOS TSan | `ctest --preset tsan --output-on-failure` | 69/69 passed |
-| macOS profile | `ctest --preset profile --output-on-failure` | 69/69 passed |
-| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 90/90 passed; echo/work benchmark smoke passed |
+| macOS dev | `ctest --preset dev --output-on-failure` | 71/71 passed |
+| macOS release | `ctest --preset release --output-on-failure` | 71/71 passed |
+| macOS ASan/UBSan | `ctest --preset asan-ubsan --output-on-failure` | 71/71 passed |
+| macOS TSan | `ctest --preset tsan --output-on-failure` | 71/71 passed |
+| macOS profile | `ctest --preset profile --output-on-failure` | 71/71 passed |
+| Ubuntu 24.04 Docker release | `./scripts/check_linux_docker.sh` | 95/95 passed; echo/work benchmark smoke passed |
 
 The macOS runs exclude Linux-only epoll tests because `epoll`, `eventfd`, and `signalfd` are Linux
 APIs. The Linux Docker run includes the epoll server tests.
@@ -112,6 +112,8 @@ Unit tests cover:
 - partial write preservation after `EAGAIN`
 - read/write byte budgets
 - output buffer high-water rejection
+- output storage compaction after partial writes
+- coalesced frames at the input buffer limit
 - bounded queue close and saturation behavior
 - worker pool completion and shutdown behavior
 - deterministic work request encoding, digest generation, and invalid payload rejection
@@ -128,6 +130,8 @@ Integration tests cover:
 - multiple clients over the epoll reactor
 - work request/response over the epoll reactor
 - epoll server CLI help and invalid option validation
+- half-close draining across read budgets
+- signal mask restoration after construction failure
 - stale worker result discard after connection removal
 - max connection limit enforcement
 - input buffer limit enforcement over the epoll reactor

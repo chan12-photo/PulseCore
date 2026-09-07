@@ -11,6 +11,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <span>
 #include <utility>
 #include <vector>
@@ -184,6 +185,36 @@ TEST(NonBlockingConnectionTest, ReadsMultipleFramesFromOneReadableEvent) {
   EXPECT_EQ(result.messages[1].payload, (std::vector<protocol::Byte>{0x02, 0x03}));
 }
 
+TEST(NonBlockingConnectionTest, ReadsCoalescedMaximumFrameAndFollowingFrameWithinInputLimit) {
+  auto pair = MakeSocketPair();
+  SetSendBufferSize(pair.peer_end.get(), 256 * 1024);
+  SetNonBlocking(pair.connection_end.get());
+
+  Connection connection(ConnectionId{7}, std::move(pair.connection_end));
+  auto bytes = EncodeOrDie(EchoRequest(1, std::vector<protocol::Byte>(
+                                              protocol::kMaxPayloadSize, 0x41)));
+  const auto second = EncodeOrDie(EchoRequest(2, {0x02}));
+  bytes.insert(bytes.end(), second.begin(), second.end());
+  SendBytes(pair.peer_end.get(), bytes);
+
+  std::vector<protocol::Message> messages;
+  auto result = connection.ReadAvailable();
+  ASSERT_NE(result.status, ReadAvailableStatus::kProtocolError);
+  messages.insert(messages.end(), std::make_move_iterator(result.messages.begin()),
+                  std::make_move_iterator(result.messages.end()));
+
+  result = connection.ReadAvailable();
+  ASSERT_NE(result.status, ReadAvailableStatus::kProtocolError);
+  messages.insert(messages.end(), std::make_move_iterator(result.messages.begin()),
+                  std::make_move_iterator(result.messages.end()));
+
+  ASSERT_EQ(messages.size(), 2U);
+  EXPECT_EQ(messages[0].request_id, 1U);
+  EXPECT_EQ(messages[0].payload.size(), protocol::kMaxPayloadSize);
+  EXPECT_EQ(messages[1].request_id, 2U);
+  EXPECT_EQ(messages[1].payload, (std::vector<protocol::Byte>{0x02}));
+}
+
 TEST(NonBlockingConnectionTest, ReadAvailableHonorsReadByteBudget) {
   auto pair = MakeSocketPair();
   SetNonBlocking(pair.connection_end.get());
@@ -354,6 +385,34 @@ TEST(NonBlockingConnectionTest, WriteAvailableHonorsWriteByteBudget) {
 
   EXPECT_EQ(write_result.status, WriteAvailableStatus::kOk);
   EXPECT_FALSE(connection.has_pending_output());
+}
+
+TEST(NonBlockingConnectionTest, CompactsStoredOutputBeforeAppendingAfterPartialWrites) {
+  auto pair = MakeSocketPair();
+  SetNonBlocking(pair.connection_end.get());
+
+  ConnectionLimits limits{};
+  limits.max_output_buffer = 2U * (protocol::kHeaderSize + 1U);
+
+  Connection connection(ConnectionId{7}, std::move(pair.connection_end), limits);
+  const auto response = EchoResponse(88, {0x10});
+  const auto frame_size = EncodeOrDie(response).size();
+  ASSERT_EQ(frame_size, protocol::kHeaderSize + 1U);
+
+  ASSERT_TRUE(connection.QueueOutput(response));
+  ASSERT_TRUE(connection.QueueOutput(response));
+
+  std::array<protocol::Byte, protocol::kHeaderSize + 1U> received{};
+  for (int i = 0; i < 1000; ++i) {
+    const auto write_result = connection.WriteAvailable(frame_size);
+    ASSERT_EQ(write_result.status, WriteAvailableStatus::kOk);
+    ASSERT_EQ(write_result.bytes_written, frame_size);
+    ASSERT_EQ(::recv(pair.peer_end.get(), received.data(), received.size(), MSG_WAITALL),
+              static_cast<ssize_t>(received.size()));
+    ASSERT_TRUE(connection.QueueOutput(response));
+    EXPECT_EQ(connection.pending_output_bytes(), limits.max_output_buffer);
+    EXPECT_LE(connection.output_storage_bytes(), limits.max_output_buffer);
+  }
 }
 
 TEST(NonBlockingConnectionTest, RejectsOutputAboveConfiguredLimit) {
