@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-PulseCore is a C++20/Linux systems programming portfolio project. Its goal is to demonstrate TCP framing, non-blocking I/O, an epoll-based reactor, bounded worker queues, graceful shutdown, testing, sanitizer use, benchmarking, profiling, and one evidence-based optimization.
+PulseCore is a C++20/Linux systems programming portfolio project. Its goal is to demonstrate TCP framing, non-blocking I/O, an epoll-based reactor, bounded worker queues, reactor-driven signal shutdown, testing, sanitizer use, benchmarking, profiling, and one evidence-based optimization.
 
 The project should complement the Java BankCore project rather than duplicate it. BankCore demonstrates business correctness around transactions and persistence. PulseCore demonstrates resource ownership, socket lifecycle, concurrency, and performance engineering.
 
@@ -20,7 +20,7 @@ The Core project stops at a Linux event-processing engine:
 - single-reactor epoll event loop
 - bounded request and response paths
 - worker pool
-- graceful shutdown
+- reactor-driven POSIX signal shutdown
 - unit and integration tests
 - ASan, UBSan, and TSan evidence
 - reproducible benchmark and perf evidence

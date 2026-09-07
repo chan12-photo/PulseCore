@@ -2,7 +2,7 @@
 
 PulseCore is a C++20/Linux event-processing engine built to demonstrate systems programming
 judgment: explicit protocol design, non-blocking TCP I/O, epoll-based readiness handling, bounded
-resource management, worker hand-off, graceful shutdown, repeatable testing, and evidence-based
+resource management, worker hand-off, reactor-driven shutdown, repeatable testing, and evidence-based
 performance work.
 
 It is intentionally not a trading system or a financial product. The project focuses on the engine
