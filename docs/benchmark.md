@@ -20,9 +20,10 @@ percentiles. It can run either echo requests or deterministic synthetic work req
 - `--work-iterations N`: deterministic work iterations per request, default `1000`, maximum `1000000`;
   large seed payloads are also constrained by the handler's total work-unit cap
 
-Latency is measured in each client thread from immediately before `SendMessage()` to immediately
-after the response has been decoded and validated. Percentiles use nearest-rank selection over all
-client requests in the run.
+Throughput is measured across the full client run, including client connection setup and per-client
+request template preparation. Latency is measured in each client thread from immediately before
+`SendMessage()` to immediately after the response has been decoded and validated. Percentiles use
+nearest-rank selection over all client requests in the run.
 
 For echo mode, each response payload moves the request payload back to the client unchanged. For work
 mode, each request payload is a 4-byte iteration count plus the seed bytes, and each response payload

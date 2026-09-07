@@ -59,7 +59,8 @@ use the same resource policy knobs as the integration tests.
 
 This is not a multi-reactor production server.
 
-- shutdown closes live connections instead of draining every pending response
+- shutdown is signal-safe and reactor-driven, but it closes live connections instead of draining every
+  pending response or enforcing a shutdown deadline
 - fairness is byte-budget based, not priority or latency scheduled
 
 Those policies can be tightened after the reactor/worker path is green.

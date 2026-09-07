@@ -13,7 +13,7 @@ This layer does not use epoll yet. It only proves that one socket can be driven 
 - preserve partial input in a frame decoder
 - return all complete protocol messages currently buffered
 - track pending output bytes and write offset
-- avoid unbounded output growth through a configured limit
+- keep pending and stored output bounded by a configured limit
 - preserve pending output after partial writes and `EAGAIN`
 - limit read/write work with per-call byte budgets
 
@@ -34,7 +34,9 @@ Read:
 
 Write:
 
-- `kOk`: output buffer is empty
+- `kOk`: the call made progress, found no pending output, or stopped cleanly at the byte budget;
+  callers should use `has_pending_output()` to distinguish fully flushed output from budget-limited
+  progress
 - `kWouldBlock`: socket cannot accept more bytes now
 - `kPeerClosed`: peer closed or reset the connection
 

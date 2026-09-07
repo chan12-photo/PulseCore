@@ -67,6 +67,11 @@ PulseCore favors conservative overload behavior over partial degradation. When a
 exhausted, the affected connection is closed instead of allowing unbounded memory growth or blocking
 the reactor.
 
+The shutdown path is graceful in the signal-handling sense: configured POSIX signals are consumed via
+`signalfd` in the reactor instead of doing work inside an async signal handler. The current policy
+closes live connections and waits for workers to join; it does not promise to drain every pending
+response or meet a shutdown deadline.
+
 The worker queue is a mutex and condition-variable baseline, not a lock-free queue. That keeps the
 initial concurrency model inspectable and measurable before introducing lower-level data structures.
 

@@ -31,10 +31,11 @@ requests per connection.
 
 ## Consequences
 
-One busy client can no longer monopolize the global worker queue and response reorder buffer.
+One busy client can no longer grow its own outstanding request count or response reorder buffer
+without bound.
 
 The first overload policy remains intentionally conservative: close the overloaded connection rather
 than trying to buffer unbounded work or synthesize partial overload responses.
 
-The limit is per connection, not a global admission controller. Global queue capacity still protects
-the worker pool across all connections.
+The limit is per connection, not a global admission controller or latency fairness guarantee. Global
+queue capacity still protects the worker pool across all connections.

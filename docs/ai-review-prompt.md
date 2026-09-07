@@ -25,6 +25,8 @@ Current implementation summary:
 - Runtime CLI controls for workers, queue capacity, max connections, in-flight limit, I/O budgets, and buffer limits.
 - Per-connection response ordering for asynchronous worker results.
 - Per-connection in-flight request limit and max connection limit.
+- Reactor-driven shutdown through signalfd; it closes live connections and does not promise to drain
+  every pending response.
 - Linux epoll loopback benchmark with echo/work modes.
 - perf profiling notes and one measured hot-path copy reduction optimization.
 - ADRs, testing docs, benchmark docs, case study, and release checklist.

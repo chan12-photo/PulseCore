@@ -30,8 +30,9 @@ Each item carries:
 
 Each result carries the same connection identity and sequence number plus the protocol response.
 
-The reactor enforces a per-connection in-flight request limit before submitting each item. This
-prevents one hot connection from monopolizing the global worker queue and response reorder buffer.
+The reactor enforces a per-connection in-flight request limit before submitting each item. This caps
+one connection's outstanding requests and response reorder-buffer entries. The global worker queue is
+still shared across all live connections.
 
 ## Reactor Response Path
 
@@ -44,5 +45,6 @@ Responses are held in a per-connection sequence map until every earlier response
 ## Current Limitations
 
 - queue-full and per-connection in-flight saturation policies close the affected connection
+- the completion callback is an internal server callback and is expected not to throw
 - no timeout/cancellation for long-running custom work handlers
 - shutdown closes live connections before worker completion results are drained
