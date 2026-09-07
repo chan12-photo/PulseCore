@@ -20,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -203,6 +204,39 @@ TEST(EpollEchoIntegrationTest, HandlesWorkRequestOverTcp) {
   EXPECT_EQ(response.request_id, 99U);
   EXPECT_EQ(response.payload,
             (std::vector<protocol::Byte>{0xA2, 0x89, 0x7E, 0x00, 0x44, 0x62, 0x2F, 0x90}));
+}
+
+TEST(EpollEchoIntegrationTest, ReturnsErrorWhenWorkerHandlerThrowsAndKeepsServerRunning) {
+  EpollEchoServerOptions options;
+  options.handler = [](protocol::Message request) {
+    if (request.request_id == 1) {
+      throw std::runtime_error("handler failure");
+    }
+    return core::HandleOwnedRequest(std::move(request));
+  };
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  UniqueFd first_client = ConnectTcp("127.0.0.1", server.port());
+  SendMessage(first_client.get(), EchoRequest(1, {0x01}));
+  protocol::FrameDecoder first_decoder;
+  auto first = ReadMessage(first_client.get(), first_decoder);
+
+  const auto second =
+      SendRequestAndReadResponse("127.0.0.1", server.port(), EchoRequest(2, {0x02}));
+
+  first_client.reset();
+  server_thread.StopAndJoin();
+
+  ASSERT_EQ(first.status, ReadMessageStatus::kMessage);
+  ASSERT_TRUE(first.message.has_value());
+  EXPECT_EQ(first.message->type, protocol::MessageType::kErrorResponse);
+  EXPECT_EQ(first.message->request_id, 1U);
+  EXPECT_FALSE(first.message->payload.empty());
+  EXPECT_EQ(second.type, protocol::MessageType::kEchoResponse);
+  EXPECT_EQ(second.request_id, 2U);
+  EXPECT_EQ(second.payload, (std::vector<protocol::Byte>{0x02}));
 }
 
 TEST(EpollEchoIntegrationTest, EchoesRequestWithSmallPerEventBudgets) {

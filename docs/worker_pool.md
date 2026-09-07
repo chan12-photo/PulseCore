@@ -19,6 +19,8 @@ The reactor uses `TryPush` only, so it does not block on worker saturation.
 `WorkerPool` consumes `WorkItem` values and emits `WorkResult` values through a completion callback.
 The work handler receives each decoded request by value, allowing the default request handler to
 move payload storage into the response on the asynchronous path.
+If a work handler throws, the worker converts that failure into an error response for the same request
+id instead of letting the exception escape the worker thread.
 
 Each item carries:
 
@@ -42,5 +44,5 @@ Responses are held in a per-connection sequence map until every earlier response
 ## Current Limitations
 
 - queue-full and per-connection in-flight saturation policies close the affected connection
-- no timeout/cancellation for long-running work
+- no timeout/cancellation for long-running custom work handlers
 - shutdown closes live connections before worker completion results are drained

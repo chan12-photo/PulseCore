@@ -3,6 +3,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -66,6 +67,40 @@ TEST(WorkerPoolTest, RejectsSubmissionsAfterStop) {
       .sequence = 0,
       .request = EchoRequest(1),
   }));
+}
+
+TEST(WorkerPoolTest, ConvertsHandlerExceptionToErrorResponse) {
+  std::mutex mutex;
+  std::condition_variable completed;
+  std::vector<WorkResult> results;
+
+  WorkerPool pool(WorkerPoolConfig{.worker_count = 1, .queue_capacity = 1},
+                  [&](WorkResult result) {
+                    {
+                      std::lock_guard lock(mutex);
+                      results.push_back(std::move(result));
+                    }
+                    completed.notify_one();
+                  },
+                  [](protocol::Message) -> protocol::Message {
+                    throw std::runtime_error("boom");
+                  });
+
+  EXPECT_TRUE(pool.TrySubmit(WorkItem{
+      .connection_id = ConnectionId{7},
+      .sequence = 3,
+      .request = EchoRequest(42),
+  }));
+
+  std::unique_lock lock(mutex);
+  ASSERT_TRUE(completed.wait_for(lock, 1s, [&results] { return results.size() == 1; }));
+  pool.Stop();
+
+  EXPECT_EQ(results[0].connection_id.value, 7U);
+  EXPECT_EQ(results[0].sequence, 3U);
+  EXPECT_EQ(results[0].response.type, protocol::MessageType::kErrorResponse);
+  EXPECT_EQ(results[0].response.request_id, 42U);
+  EXPECT_FALSE(results[0].response.payload.empty());
 }
 
 TEST(WorkerPoolTest, RejectsInvalidConfiguration) {

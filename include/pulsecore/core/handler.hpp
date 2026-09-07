@@ -9,6 +9,7 @@
 namespace pulsecore::core {
 
 constexpr std::uint32_t kMaxWorkIterations = 1'000'000U;
+constexpr std::uint64_t kMaxWorkUnits = 64ULL * 1024ULL * 1024ULL;
 
 [[nodiscard]] std::vector<protocol::Byte> EncodeWorkRequestPayload(
     std::uint32_t iterations,

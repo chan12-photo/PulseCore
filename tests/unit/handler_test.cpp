@@ -1,5 +1,6 @@
 #include "pulsecore/core/handler.hpp"
 
+#include <cstddef>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -63,6 +64,22 @@ TEST(HandlerTest, WorkRequestRejectsExcessiveIterations) {
 
   EXPECT_EQ(response.type, protocol::MessageType::kErrorResponse);
   EXPECT_EQ(response.request_id, 101U);
+  EXPECT_FALSE(response.payload.empty());
+}
+
+TEST(HandlerTest, WorkRequestRejectsExcessiveTotalWorkUnits) {
+  const std::size_t seed_size =
+      static_cast<std::size_t>(kMaxWorkUnits / kMaxWorkIterations) + 1U;
+
+  const auto response = HandleRequest(protocol::Message{
+      .type = protocol::MessageType::kWorkRequest,
+      .request_id = 102,
+      .payload = EncodeWorkRequestPayload(kMaxWorkIterations,
+                                           std::vector<protocol::Byte>(seed_size, 0xAA)),
+  });
+
+  EXPECT_EQ(response.type, protocol::MessageType::kErrorResponse);
+  EXPECT_EQ(response.request_id, 102U);
   EXPECT_FALSE(response.payload.empty());
 }
 

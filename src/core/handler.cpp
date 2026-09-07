@@ -62,6 +62,12 @@ std::optional<std::vector<protocol::Byte>> ComputeWorkResponsePayload(
   }
 
   const auto seed = payload.subspan(kIterationBytes);
+  const auto seed_work_units =
+      seed.empty() ? 1ULL : static_cast<std::uint64_t>(seed.size());
+  if (iterations > 0 && seed_work_units > kMaxWorkUnits / iterations) {
+    return std::nullopt;
+  }
+
   std::uint64_t hash = kFnvOffset;
   for (std::uint32_t round = 0; round < iterations; ++round) {
     hash ^= round;

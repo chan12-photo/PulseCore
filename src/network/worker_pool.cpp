@@ -1,9 +1,26 @@
 #include "pulsecore/network/worker_pool.hpp"
 
 #include <stdexcept>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace pulsecore::network {
+namespace {
+
+std::vector<protocol::Byte> ErrorPayload(std::string_view message) {
+  return {message.begin(), message.end()};
+}
+
+protocol::Message WorkerHandlerErrorResponse(std::uint64_t request_id) {
+  return protocol::Message{
+      .type = protocol::MessageType::kErrorResponse,
+      .request_id = request_id,
+      .payload = ErrorPayload("worker handler failed"),
+  };
+}
+
+}  // namespace
 
 WorkerPool::WorkerPool(WorkerPoolConfig config,
                        WorkCompletion on_complete,
@@ -56,7 +73,16 @@ std::size_t WorkerPool::pending_work_count() const {
 
 void WorkerPool::WorkerLoop() {
   while (auto item = queue_.Pop()) {
-    auto response = handler_(std::move(item->request));
+    const auto request_id = item->request.request_id;
+    protocol::Message response = WorkerHandlerErrorResponse(request_id);
+    try {
+      response = handler_(std::move(item->request));
+    } catch (const std::exception&) {
+      response = WorkerHandlerErrorResponse(request_id);
+    } catch (...) {
+      response = WorkerHandlerErrorResponse(request_id);
+    }
+
     on_complete_(WorkResult{
         .connection_id = item->connection_id,
         .sequence = item->sequence,

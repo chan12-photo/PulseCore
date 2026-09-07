@@ -13,7 +13,8 @@ benchmarks without depending on external systems or nondeterministic sleeps.
 ## Decision
 
 `WORK` requests now encode a 4-byte big-endian iteration count followed by seed bytes. The handler
-rejects payloads shorter than 4 bytes and rejects iteration counts above 1,000,000.
+rejects payloads shorter than 4 bytes, iteration counts above 1,000,000, and request shapes whose
+iteration count multiplied by seed work units would exceed 67,108,864 total work units.
 
 Accepted work requests run a deterministic bounded hash-style loop over the iteration count and seed,
 then return an 8-byte big-endian digest in a `WORK` response.
@@ -24,7 +25,8 @@ server path but validates digest responses instead of echoed payloads.
 ## Consequences
 
 The worker pool now has a real bounded CPU workload for tests, benchmark smoke checks, and portfolio
-evidence.
+evidence. The total work-unit cap keeps large seed payloads from multiplying the maximum iteration
+count into an excessively long synthetic request.
 
 The digest is intentionally not cryptographic. Its job is repeatability and enough computation to make
 worker scheduling, queueing, and backpressure easier to observe.

@@ -24,11 +24,11 @@ git diff --check
 
 Expected current result:
 
-- macOS dev: 71/71 tests passed
-- macOS release: 71/71 tests passed
-- macOS ASan/UBSan: 71/71 tests passed
-- macOS TSan: 71/71 tests passed
-- macOS profile: 71/71 tests passed
+- macOS dev: 73/73 tests passed
+- macOS release: 73/73 tests passed
+- macOS ASan/UBSan: 73/73 tests passed
+- macOS TSan: 73/73 tests passed
+- macOS profile: 73/73 tests passed
 
 ```bash
 ./scripts/check_linux_docker.sh
@@ -36,7 +36,7 @@ Expected current result:
 
 Expected current result:
 
-- Ubuntu 24.04 Docker release: 95/95 tests passed
+- Ubuntu 24.04 Docker release: 98/98 tests passed
 - Echo benchmark smoke passed
 - Work benchmark smoke passed
 

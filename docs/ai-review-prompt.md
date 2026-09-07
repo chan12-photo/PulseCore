@@ -30,8 +30,8 @@ Current implementation summary:
 - ADRs, testing docs, benchmark docs, case study, and release checklist.
 
 Current verification evidence:
-- macOS local presets pass 71/71 tests for dev, release, ASan/UBSan, TSan, and profile.
-- Ubuntu 24.04 Docker release check passes 95/95 tests, including Linux-only epoll tests and benchmark smoke.
+- macOS local presets pass 73/73 tests for dev, release, ASan/UBSan, TSan, and profile.
+- Ubuntu 24.04 Docker release check passes 98/98 tests, including Linux-only epoll tests and benchmark smoke.
 - GitHub Actions CI passes GCC dev, GCC release, Clang dev, Clang ASan/UBSan, and Clang TSan jobs.
 
 Please review these files first:
@@ -83,11 +83,12 @@ then continue with small, verifiable portfolio-readiness improvements. Do not re
 Latest known state:
 - main branch is pushed to GitHub.
 - CI is green.
-- macOS local checks pass 71/71 across dev/release/ASan-UBSan/TSan/profile.
-- Ubuntu 24.04 Docker release check passes 95/95 plus echo/work benchmark smoke.
+- macOS local checks pass 73/73 across dev/release/ASan-UBSan/TSan/profile.
+- Ubuntu 24.04 Docker release check passes 98/98 plus echo/work benchmark smoke.
 - Recent commits added CLI validation coverage, updated GitHub Actions checkout, polished docs, added
   an epoll stale-worker-result integration test, tightened numeric CLI parsing, and fixed review-found
-  half-close, input coalescing, output storage, and signal-mask edge cases.
+  half-close, input coalescing, output storage, signal-mask, worker handler exception, and WORK
+  bounding edge cases.
 
 Good next tasks:
 1. Do a final README/docs pass for portfolio clarity and claim accuracy.

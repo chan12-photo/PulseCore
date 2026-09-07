@@ -17,14 +17,16 @@ percentiles. It can run either echo requests or deterministic synthetic work req
 - `--payload-size N`: seed payload bytes per request
 - `--workers N`: worker threads used by the epoll server
 - `--message-type echo|work`: request type to send, default `echo`
-- `--work-iterations N`: deterministic work iterations per request, default `1000`, maximum `1000000`
+- `--work-iterations N`: deterministic work iterations per request, default `1000`, maximum `1000000`;
+  large seed payloads are also constrained by the handler's total work-unit cap
 
 Latency is measured in each client thread from immediately before `SendMessage()` to immediately
 after the response has been decoded and validated. Percentiles use nearest-rank selection over all
 client requests in the run.
 
-For echo mode, each response payload matches the request payload. For work mode, each request payload
-is a 4-byte iteration count plus the seed bytes, and each response payload is an 8-byte digest. The
+For echo mode, each response payload moves the request payload back to the client unchanged. For work
+mode, each request payload is a 4-byte iteration count plus the seed bytes, and each response payload
+is a freshly generated 8-byte digest. The
 reported MiB/sec value is based on the actual encoded request and response frame sizes for the chosen
 mode.
 
