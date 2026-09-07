@@ -10,10 +10,13 @@
 #include <unistd.h>
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <future>
+#include <memory>
 #include <optional>
 #include <span>
 #include <thread>
@@ -108,6 +111,23 @@ void SetReceiveTimeout(int fd) {
   timeval timeout{};
   timeout.tv_sec = 1;
   ASSERT_EQ(::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0);
+}
+
+bool WaitForPeerClose(int fd) {
+  const auto deadline = std::chrono::steady_clock::now() + 1s;
+  while (std::chrono::steady_clock::now() < deadline) {
+    std::array<protocol::Byte, 1> byte{};
+    const auto received = ::recv(fd, byte.data(), byte.size(), 0);
+    if (received == 0 || (received < 0 && errno == ECONNRESET)) {
+      return true;
+    }
+    if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+      std::this_thread::sleep_for(1ms);
+      continue;
+    }
+    return false;
+  }
+  return false;
 }
 
 }  // namespace
@@ -358,6 +378,57 @@ TEST(EpollEchoIntegrationTest, PreservesResponseOrderWhenWorkersCompleteOutOfOrd
   EXPECT_EQ(second.message->request_id, 2U);
   EXPECT_EQ(first.message->payload, (std::vector<protocol::Byte>{0x01}));
   EXPECT_EQ(second.message->payload, (std::vector<protocol::Byte>{0x02}));
+}
+
+TEST(EpollEchoIntegrationTest, DropsWorkerResultForConnectionRemovedBeforeCompletion) {
+  auto first_started = std::make_shared<std::promise<void>>();
+  auto release_first = std::make_shared<std::promise<void>>();
+  auto release_first_future = release_first->get_future().share();
+  auto first_started_once = std::make_shared<std::atomic_bool>(false);
+  auto first_started_future = first_started->get_future();
+
+  EpollEchoServerOptions options;
+  options.worker_count = 1;
+  options.work_queue_capacity = 4;
+  options.handler = [first_started, release_first_future, first_started_once](
+                        protocol::Message request) {
+    if (request.request_id == 1) {
+      if (!first_started_once->exchange(true)) {
+        first_started->set_value();
+      }
+      release_first_future.wait();
+    }
+    return core::HandleOwnedRequest(std::move(request));
+  };
+
+  EpollEchoServer server(0, std::move(options));
+  EpollServerThread server_thread(server);
+
+  UniqueFd first_client = ConnectTcp("127.0.0.1", server.port());
+  SendMessage(first_client.get(), EchoRequest(1, {0x01}));
+  ASSERT_EQ(first_started_future.wait_for(1s), std::future_status::ready);
+
+  const std::array<protocol::Byte, protocol::kHeaderSize> invalid_header{};
+  SendBytes(first_client.get(), invalid_header);
+  SetNonBlocking(first_client.get());
+  ASSERT_TRUE(WaitForPeerClose(first_client.get()));
+  first_client.reset();
+
+  UniqueFd second_client = ConnectTcp("127.0.0.1", server.port());
+  SendMessage(second_client.get(), EchoRequest(2, {0x02}));
+  release_first->set_value();
+
+  protocol::FrameDecoder decoder;
+  auto response = ReadMessage(second_client.get(), decoder);
+
+  second_client.reset();
+  server_thread.StopAndJoin();
+
+  ASSERT_EQ(response.status, ReadMessageStatus::kMessage);
+  ASSERT_TRUE(response.message.has_value());
+  EXPECT_EQ(response.message->type, protocol::MessageType::kEchoResponse);
+  EXPECT_EQ(response.message->request_id, 2U);
+  EXPECT_EQ(response.message->payload, (std::vector<protocol::Byte>{0x02}));
 }
 
 TEST(EpollEchoIntegrationTest, ClosesConnectionWhenPerConnectionInFlightLimitIsExceeded) {
